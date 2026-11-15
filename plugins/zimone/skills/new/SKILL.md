@@ -12,9 +12,9 @@ Topic seed from the user: $ARGUMENTS
 In this skill and in the reference docs it points to, `$ZIMONE` stands for
 `node ${CLAUDE_PLUGIN_ROOT}/runtime/bin/zimone.mjs`. Write that command out in full every time.
 Don't put it in a shell variable or function: zsh won't split a variable, and a wrapper isn't
-covered by this skill's pre-approval. Reference docs are printed by `$ZIMONE docs <name>...`
-(several names at once is fine); don't read plugin files directly, since they're usually outside
-this session's folder.
+covered by this skill's pre-approval. Reference docs are printed by `$ZIMONE docs <name>`. Fetch
+each one in its own call, since they're long and tool output can be cut short. Don't read plugin
+files directly, since they're usually outside this session's folder.
 Read the workbook reference (`$ZIMONE docs workbook`) before creating any workbook files.
 
 ## Pick the mode

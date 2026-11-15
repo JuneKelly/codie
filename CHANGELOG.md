@@ -15,6 +15,8 @@ Add an entry with each bump.
   optional validated `fields`, roles `user`/`agent`/`system`, and two events, `message` and
   `unit_state`. Routes: `POST /api/messages`, `POST /api/units/:id/state`, `POST /api/post`.
   `zimone say` is now `zimone post`; `zimone docs book` is now `zimone docs workbook`.
+- Clearer reference docs from a live test: fetch each doc in its own call, draw diagrams in
+  fenced `text` blocks, and how to handle a finished unit whose successor already exists.
 - **Clean break:** no migration. Folders with `book.json` aren't recognised, and state from
   earlier versions is refused (state version 2).
 

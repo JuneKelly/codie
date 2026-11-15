@@ -111,13 +111,14 @@ A margin note attached to block c1-p01. It renders just below that block.
 
 A `check` asks the user for a written answer and how sure they are; answers come to you as
 events (see the serving reference). A `gloss` is a note shown under the block named by `for`.
+A fenced block takes any language tag, or none, before its `{#id}`.
 
 Within a block, write standard CommonMark plus pipe tables (rendered by markdown-it): headings,
 paragraphs, blockquotes, nested lists, fenced code, `---`, bold/italic/code/links, and tables
 (`| a | b |` with a `|---|---|` row under the header; write a literal pipe in a cell as `\|`,
 even inside code). Raw HTML is shown as text, and images appear only as links, so don't use
-either. A blank line always starts a new block, so keep each list, table or quote free of blank
-lines.
+either; for a diagram, draw it as text in a fenced `text` block. A blank line always starts a new
+block, so keep each list, table or quote free of blank lines.
 
 Write and edit unit files with your Write and Edit tools, not shell scripts. After writing or
 editing a unit, run `$ZIMONE check <workbook> <unit-id>` and fix every error. Never leave the

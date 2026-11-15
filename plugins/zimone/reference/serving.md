@@ -109,13 +109,16 @@ and `block_attrs.objective` is the objective it tests. Read the check's question
 ### `unit_state`
 
 Fields: `thread_id, unit, state, next_unit, next_exists`. The user changed a unit's state; today
-the only state is `done`. The thread is that unit's thread, where the user is waiting.
+the only state is `done`. The thread is that unit's thread, where the user is waiting. Writing a
+unit takes a while, so step 2's `post` is your "it's coming" message, and the `reply` in step 4
+comes when the unit is ready.
 
 1. Review `learner.md` (this unit's checks and inquiries) against `plan.md`.
 2. `post` into that unit's thread, in one or two sentences, what the next unit will do
    differently because of how this one went, or that it'll follow the plan as is.
-3. Write or revise the next unit to address what you saw: review a shaky objective, skip what's
-   secure, or follow a thread of interest. Log plan changes under Amendments.
+3. Write the next unit (or, if `next_exists` is true because it was written earlier, revise it)
+   to address what you saw: review a shaky objective, skip what's secure, or follow a thread of
+   interest. Log plan changes under Amendments.
 4. Run `$ZIMONE check`, then `reply` to the event with a link: `[<title>](/u/<next_unit>) is
    ready.` The contents page updates automatically.
 
@@ -126,4 +129,5 @@ against the objectives, and offer to extend the workbook.
 
 - Prefer additions (glosses, new units) to rewriting text the user has already read.
 - Never leave `$ZIMONE check` failing.
-- If a task will take more than a minute or two, reply first saying it's coming, then do it.
+- For a `message` that will take more than a minute or two to act on, reply first saying it's
+  coming, then do it.
