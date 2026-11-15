@@ -5,6 +5,7 @@ const els = {
   title: $('cx-book-title'),
   conn: $('cx-conn'),
   toggle: $('cx-toggle-side'),
+  closeSide: $('cx-close-side'),
   banner: $('cx-banner'),
   content: $('cx-content'),
   finish: $('cx-finish'),
@@ -73,10 +74,38 @@ function setConn(s) {
   els.conn.textContent = { live: 'live', down: 'disconnected', connecting: 'connecting' }[s];
 }
 
-function openSide() {
-  document.body.classList.add('cx-side-open');
-  els.toggle.setAttribute('aria-expanded', 'true');
+// Sidebar state. Wide screens default to open and remember the reader's choice; narrow screens
+// show it as an overlay that starts closed. Both classes are set so either layout reads them.
+const SIDE_KEY = 'codie.sideClosed';
+const narrow = window.matchMedia('(max-width: 900px)');
+
+function setSide(open, { remember = false } = {}) {
+  document.body.classList.toggle('cx-side-open', open);
+  document.body.classList.toggle('cx-side-closed', !open);
+  els.toggle.setAttribute('aria-expanded', String(open));
+  if (remember && !narrow.matches) {
+    try {
+      localStorage.setItem(SIDE_KEY, open ? '0' : '1');
+    } catch {
+      // Storage unavailable (private window, blocked site data): the choice lasts for this page only.
+    }
+  }
 }
+
+function initialSideOpen() {
+  if (narrow.matches) return false;
+  try {
+    return localStorage.getItem(SIDE_KEY) !== '1';
+  } catch {
+    return true; // storage unavailable: use the wide-screen default
+  }
+}
+
+function openSide() {
+  setSide(true);
+}
+
+setSide(initialSideOpen());
 
 // ---------------------------------------------------------------- text anchoring
 
@@ -484,9 +513,15 @@ els.composeText.addEventListener('keydown', (ev) => {
 });
 els.composeCancel.addEventListener('click', closeCompose);
 els.askChapter.addEventListener('click', () => openCompose(null));
-els.toggle.addEventListener('click', () => {
-  const open = document.body.classList.toggle('cx-side-open');
-  els.toggle.setAttribute('aria-expanded', String(open));
+els.toggle.addEventListener('click', () => setSide(!document.body.classList.contains('cx-side-open'), { remember: true }));
+els.closeSide.addEventListener('click', () => {
+  setSide(false, { remember: true });
+  els.toggle.focus();
+});
+// Esc closes the sidebar, unless it's being used to leave a text field (the composer handles its own Esc).
+document.addEventListener('keydown', (ev) => {
+  if (ev.key !== 'Escape' || (ev.target instanceof Element && ev.target.closest('textarea, input'))) return;
+  if (document.body.classList.contains('cx-side-open')) setSide(false, { remember: true });
 });
 
 // Floating "Ask about this" button for selections.

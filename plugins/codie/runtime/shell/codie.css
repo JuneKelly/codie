@@ -57,7 +57,7 @@ button, textarea, input { font: inherit; color: inherit; }
 .cx-conn::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
 .cx-conn[data-state="live"]::before { background: var(--ok); }
 .cx-conn[data-state="down"]::before { background: var(--bad); }
-#cx-toggle-side { display: none; }
+#cx-toggle-side[aria-expanded="true"] { background: var(--accent-soft); }
 
 /* Layout */
 .cx-layout { display: grid; grid-template-columns: minmax(0, 1fr) var(--side-w); min-height: calc(100vh - 45px); }
@@ -118,7 +118,16 @@ mark.cx-mark.cx-active { background: var(--mark-active); }
   padding: 16px; font-family: var(--sans); font-size: 15px; line-height: 1.5;
 }
 .cx-side-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 12px; }
-.cx-side-head h2 { font-size: 15px; margin: 0; }
+.cx-side-head h2 { font-size: 15px; margin: 0; flex: 1; }
+.cx-close {
+  font-family: var(--sans); font-size: 22px; line-height: 1; width: 30px; height: 30px; flex: none;
+  background: transparent; border: 0; border-radius: 6px; color: var(--muted); cursor: pointer;
+}
+.cx-close:hover { background: var(--surface-2); color: var(--text); }
+
+/* Closed sidebar on wide screens: the reading column takes the full width. */
+body.cx-side-closed .cx-layout { grid-template-columns: minmax(0, 1fr); }
+body.cx-side-closed .cx-side { display: none; }
 .cx-compose { display: grid; gap: 8px; margin-bottom: 16px; padding: 12px; background: var(--surface-2); border-radius: 8px; }
 .cx-compose textarea, .cx-followup textarea { width: 100%; padding: 8px; border: 1px solid var(--rule); border-radius: 6px; background: var(--surface); resize: vertical; font-size: 14px; }
 .cx-quote { margin: 0; padding: 2px 0 2px 10px; border-left: 3px solid var(--accent); color: var(--muted); font-family: var(--serif); font-size: 15px; font-style: italic; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
@@ -174,11 +183,11 @@ body.cx-toc-view .cx-side, body.cx-toc-view #cx-toggle-side { display: none; }
 /* Narrow screens: sidebar becomes an overlay */
 @media (max-width: 900px) {
   body { font-size: 18px; }
-  #cx-toggle-side { display: inline-block; }
   .cx-layout { grid-template-columns: minmax(0, 1fr); }
   .cx-main { padding: 28px 16px 64px; }
-  .cx-side {
-    position: fixed; top: 45px; right: 0; bottom: 0; height: auto; width: min(var(--side-w), 100vw);
+  /* Hidden unless explicitly opened, so it never flashes open while the page loads. */
+  .cx-side, body.cx-side-closed .cx-side {
+    display: block; position: fixed; top: 45px; right: 0; bottom: 0; height: auto; width: min(var(--side-w), 100vw);
     transform: translateX(100%); transition: transform 0.2s ease; z-index: 25; box-shadow: -8px 0 24px rgba(0, 0, 0, 0.15);
   }
   body.cx-side-open .cx-side { transform: none; }
