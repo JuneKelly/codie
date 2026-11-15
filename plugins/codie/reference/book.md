@@ -97,9 +97,12 @@ A margin note attached to block c1-p01. It renders just below that block.
 :::
 ```
 
-Supported: headings, paragraphs, blockquotes, `-`/`1.` lists, fenced code, `---`,
-bold/italic/code/links, and pipe tables (`| a | b |` with a `|---|---|` row under the header). No
-raw HTML or images.
+Within a block, write standard CommonMark plus pipe tables (rendered by markdown-it): headings,
+paragraphs, blockquotes, nested lists, fenced code, `---`, bold/italic/code/links, and tables
+(`| a | b |` with a `|---|---|` row under the header; write a literal pipe in a cell as `\|`,
+even inside code). Raw HTML is shown as text, and images appear only as links, so don't use
+either. A blank line always starts a new block, so keep each list, table or quote free of blank
+lines.
 
 After writing or editing a chapter, run `$CODIE check <book> <chapter-id>` and fix every
 error. Never leave the checker failing.

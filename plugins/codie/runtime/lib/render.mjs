@@ -1,12 +1,17 @@
 // Renders codie chapter Markdown into HTML.
 //
-// Chapter format (see .claude/skills/codie/SKILL.md for the authoring spec):
+// Chapter format (see reference/book.md for the authoring spec):
 //   - Top-level blocks are separated by blank lines.
 //   - Every top-level block ends with an attribute list: {#block-id key=value ...}
 //     on its last line (or on the opening line of a ``` fence or ::: directive).
 //   - Directives: ":::check {#id objective=O1}" ... ":::"  and
 //                 ":::gloss {#id for=target-id}" ... ":::"
 // Rendering never invents ids: a block without one is reported as an error.
+
+import { createRequire } from 'node:module';
+
+// Vendored markdown-it (see ../vendor/markdown-it/SOURCE.md). Raw HTML is off, so it is escaped.
+const MarkdownIt = createRequire(import.meta.url)('../vendor/markdown-it/markdown-it.min.js');
 
 const ATTR_TAIL_RE = /\s*\{([^{}]*)\}\s*$/;
 const DIRECTIVE_RE = /^:::(\w+)\s*(.*)$/;
@@ -21,29 +26,33 @@ export function escapeHtml(s) {
     .replace(/"/g, '&quot;');
 }
 
-function safeHref(url) {
-  if (/^(https?:|mailto:|#|\/|\.{0,2}\/)/i.test(url) || !/^[a-z][\w+.-]*:/i.test(url)) return url;
-  return null;
-}
+const md = new MarkdownIt({ html: false, linkify: false, typographer: false });
 
-export function renderInline(src) {
-  const codes = [];
-  let s = src.replace(/`([^`]+)`/g, (_, c) => {
-    codes.push(c);
-    return `\u0000${codes.length - 1}\u0000`;
-  });
-  s = escapeHtml(s);
-  s = s.replace(/\[([^\]]+)\]\(([^)\s]+)\)/g, (m, text, url) => {
-    const href = safeHref(url);
-    if (href === null) return text;
-    const ext = /^https?:/i.test(href) ? ' target="_blank" rel="noopener"' : '';
-    return `<a href="${href}"${ext}>${text}</a>`;
-  });
-  s = s.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
-  s = s.replace(/(^|[^\w*])\*([^*\s](?:[^*]*[^*\s])?)\*(?![\w*])/g, '$1<em>$2</em>');
-  s = s.replace(/(^|[^\w])_([^_\s](?:[^_]*[^_\s])?)_(?!\w)/g, '$1<em>$2</em>');
-  s = s.replace(/\u0000(\d+)\u0000/g, (_, i) => `<code>${escapeHtml(codes[Number(i)])}</code>`);
-  return s;
+// Only web, mail, in-page and relative links become links; anything else stays as literal text.
+md.validateLink = (url) => /^(https?:|mailto:|#|\/|\.{0,2}\/)/i.test(url) || !/^[a-z][\w+.-]*:/i.test(url.trim());
+
+const renderToken = (tokens, idx, options, _env, self) => self.renderToken(tokens, idx, options);
+md.renderer.rules.link_open = (tokens, idx, options, env, self) => {
+  if (/^https?:/i.test(tokens[idx].attrGet('href') ?? '')) {
+    tokens[idx].attrSet('target', '_blank');
+    tokens[idx].attrSet('rel', 'noopener');
+  }
+  return renderToken(tokens, idx, options, env, self);
+};
+// Books are text-only, and a remote image would load from a third party: show images as links.
+md.renderer.rules.image = (tokens, idx) => {
+  const t = tokens[idx];
+  const alt = t.children?.map((c) => c.content).join('') || 'image';
+  return `<a href="${escapeHtml(t.attrGet('src') ?? '')}" target="_blank" rel="noopener">${escapeHtml(alt)} (image)</a>`;
+};
+// A wide table scrolls sideways inside its wrapper, so it never widens the page or a message.
+md.renderer.rules.table_open = () => '<div class="cx-table-wrap"><table>\n';
+md.renderer.rules.table_close = () => '</table></div>\n';
+
+// Free-form Markdown (thread replies, directive bodies): no ids, no directives.
+export function renderMarkdown(src) {
+  // Trimmed so a block's text is exactly its content (question anchors compare text offsets).
+  return md.render(src.replace(/\r\n/g, '\n')).trimEnd();
 }
 
 // Parses "#id key=value key2="quoted value"". Returns {attrs, error}.
@@ -98,90 +107,6 @@ function splitBlocks(lines, firstLineNo, errors) {
     }
   }
   return blocks;
-}
-
-function renderList(lines, ordered) {
-  const marker = ordered ? /^\s*\d+[.)]\s+/ : /^\s*[-*]\s+/;
-  const items = [];
-  for (const l of lines) {
-    if (marker.test(l)) items.push(l.replace(marker, ''));
-    else if (items.length) items[items.length - 1] += ' ' + l.trim();
-    else items.push(l.trim());
-  }
-  const tag = ordered ? 'ol' : 'ul';
-  return `<${tag}>${items.map((it) => `<li>${renderInline(it)}</li>`).join('')}</${tag}>`;
-}
-
-// Renders the body of a plain text block (no attribute tail).
-const TABLE_SEP_RE = /^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?\s*$/;
-
-// Splits a pipe-table row into cells, ignoring pipes escaped as \| or inside `code`.
-function tableCells(line) {
-  const row = line.trim().replace(/^\|/, '').replace(/\|$/, '');
-  const cells = [];
-  let cur = '';
-  let inCode = false;
-  for (let i = 0; i < row.length; i++) {
-    const ch = row[i];
-    if (ch === '\\' && row[i + 1] === '|') {
-      cur += '|';
-      i++;
-    } else if (ch === '`') {
-      inCode = !inCode;
-      cur += ch;
-    } else if (ch === '|' && !inCode) {
-      cells.push(cur.trim());
-      cur = '';
-    } else cur += ch;
-  }
-  cells.push(cur.trim());
-  return cells;
-}
-
-function renderTable(lines) {
-  const align = tableCells(lines[1]).map((c) => (c.startsWith(':') && c.endsWith(':') ? 'center' : c.endsWith(':') ? 'right' : c.startsWith(':') ? 'left' : null));
-  const cell = (tag, text, i) => `<${tag}${align[i] ? ` style="text-align:${align[i]}"` : ''}>${renderInline(text)}</${tag}>`;
-  const head = tableCells(lines[0]).map((c, i) => cell('th', c, i)).join('');
-  const body = lines
-    .slice(2)
-    .map((l) => `<tr>${tableCells(l).map((c, i) => cell('td', c, i)).join('')}</tr>`)
-    .join('');
-  // The wrapper scrolls sideways on its own, so a wide table never widens the page or a message.
-  return `<div class="cx-table-wrap"><table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>`;
-}
-
-function renderTextBlock(lines) {
-  const first = lines[0];
-  if (lines.length >= 2 && first.includes('|') && TABLE_SEP_RE.test(lines[1])) return renderTable(lines);
-  const h = first.match(/^(#{1,6})\s+(.*)$/);
-  if (h && lines.length === 1) return `<h${h[1].length}>${renderInline(h[2])}</h${h[1].length}>`;
-  if (lines.length === 1 && /^(-{3,}|\*{3,})\s*$/.test(first)) return '<hr>';
-  if (lines.every((l) => /^>/.test(l))) {
-    const inner = lines.map((l) => l.replace(/^>\s?/, ''));
-    return `<blockquote>${renderMarkdown(inner.join('\n'))}</blockquote>`;
-  }
-  if (/^\s*[-*]\s+/.test(first)) return renderList(lines, false);
-  if (/^\s*\d+[.)]\s+/.test(first)) return renderList(lines, true);
-  return `<p>${renderInline(lines.join('\n'))}</p>`;
-}
-
-function renderFence(head, lines) {
-  const lang = head.trim().split(/\s+/)[0];
-  const cls = lang ? ` class="language-${escapeHtml(lang)}"` : '';
-  return `<pre><code${cls}>${escapeHtml(lines.join('\n'))}</code></pre>`;
-}
-
-// Free-form Markdown (thread replies, directive bodies): no ids, no directives.
-export function renderMarkdown(src) {
-  const errors = [];
-  const blocks = splitBlocks(src.replace(/\r\n/g, '\n').split('\n'), 1, errors);
-  return blocks
-    .map((b) => {
-      if (b.kind === 'fence') return renderFence(b.head, b.lines);
-      if (b.kind === 'directive') return renderTextBlock([`:::${b.type} ${b.head}`, ...b.lines, ':::']);
-      return renderTextBlock(b.lines);
-    })
-    .join('\n');
 }
 
 function plainText(src) {
@@ -253,7 +178,7 @@ export function renderChapter(src) {
 
   const blockAttr = (p) => (p.attrs.id ? ` data-block-id="${escapeHtml(p.attrs.id)}"` : '');
   const renderOne = (p) => {
-    if (p.kind === 'fence') return `<div class="cx-block"${blockAttr(p)}>${renderFence(p.head, p.body)}</div>`;
+    if (p.kind === 'fence') return `<div class="cx-block"${blockAttr(p)}>${renderMarkdown(['```' + p.head.trim(), ...p.body, '```'].join('\n'))}</div>`;
     if (p.kind === 'directive' && p.type === 'check') {
       const obj = p.attrs.objective ? ` data-objective="${escapeHtml(p.attrs.objective)}"` : '';
       return `<section class="cx-block cx-check"${blockAttr(p)}${obj}><div class="cx-check-label">Check your understanding</div><div class="cx-check-q">${renderMarkdown(p.body.join('\n'))}</div></section>`;
@@ -266,7 +191,7 @@ export function renderChapter(src) {
     }
     if (p.body.length === 0) return '';
     const invalid = p.attrs.id ? '' : ' cx-invalid';
-    return `<div class="cx-block${invalid}"${blockAttr(p)}>${renderTextBlock(p.body)}</div>`;
+    return `<div class="cx-block${invalid}"${blockAttr(p)}>${renderMarkdown(p.body.join('\n'))}</div>`;
   };
 
   const out = [];

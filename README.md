@@ -27,7 +27,8 @@ claude plugin marketplace add JuneKelly/codie
 claude plugin install codie@codie-marketplace
 ```
 
-Requires Node 20 or later. There are no dependencies.
+Requires Node 20 or later. There is nothing else to install: the one library codie uses, the
+markdown-it parser, is vendored in `plugins/codie/runtime/vendor/`.
 
 ## Use
 
@@ -90,7 +91,8 @@ browser ──HTTP/SSE──▶ codie server ◀──claim── codie watch �
 | `plugins/codie/skills/new`, `skills/open` | The two skills |
 | `plugins/codie/reference/` | Shared agent instructions: book format and authoring, serving and event handling |
 | `plugins/codie/runtime/bin/codie.mjs` | CLI: `docs`, `library`, `detect`, `serve`, `url`, `watch`, `reply`, `say`, `ack`, `thread`, `check`. The skills pre-approve it, and route reference docs and plugin settings through it, so they don't trigger file-permission prompts |
-| `plugins/codie/runtime/lib/` | Chapter renderer and validator, book loader, HTTP server |
+| `plugins/codie/runtime/lib/` | Chapter renderer and validator (block ids, directives), book loader, HTTP server |
+| `plugins/codie/runtime/vendor/markdown-it/` | Vendored Markdown parser, unmodified; `SOURCE.md` records its version and checksum |
 | `plugins/codie/runtime/shell/` | The reader page |
 | `.claude-plugin/marketplace.json` | Makes this repo its own one-plugin marketplace |
 
