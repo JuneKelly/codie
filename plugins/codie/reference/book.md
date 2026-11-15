@@ -98,7 +98,8 @@ A margin note attached to block c1-p01. It renders just below that block.
 ```
 
 Supported: headings, paragraphs, blockquotes, `-`/`1.` lists, fenced code, `---`,
-bold/italic/code/links. No raw HTML, tables or images.
+bold/italic/code/links, and pipe tables (`| a | b |` with a `|---|---|` row under the header). No
+raw HTML or images.
 
 After writing or editing a chapter, run `$CODIE check <book> <chapter-id>` and fix every
 error. Never leave the checker failing.

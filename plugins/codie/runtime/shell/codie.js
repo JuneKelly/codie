@@ -5,6 +5,7 @@ const els = {
   title: $('cx-book-title'),
   conn: $('cx-conn'),
   toggle: $('cx-toggle-side'),
+  side: $('cx-side'),
   closeSide: $('cx-close-side'),
   banner: $('cx-banner'),
   content: $('cx-content'),
@@ -122,6 +123,68 @@ function openSide() {
 }
 
 setSide(initialSideOpen());
+
+// Sidebar width (wide screens only): drag the left edge, use arrow keys on it, double-click to reset.
+const WIDTH_KEY = 'codie.sideWidth';
+const MIN_SIDE_W = 280;
+const maxSideWidth = () => Math.max(MIN_SIDE_W, Math.min(760, Math.round(window.innerWidth * 0.6)));
+const resizer = $('cx-resize');
+let sideWidth = null; // null: the stylesheet's default width
+
+function setSideWidth(w, { remember = false } = {}) {
+  sideWidth = Math.round(Math.min(maxSideWidth(), Math.max(MIN_SIDE_W, w)));
+  document.documentElement.style.setProperty('--side-w', `${sideWidth}px`);
+  if (remember) {
+    try {
+      localStorage.setItem(WIDTH_KEY, String(sideWidth));
+    } catch {
+      // Storage unavailable: the width lasts for this page only.
+    }
+  }
+}
+
+function resetSideWidth() {
+  sideWidth = null;
+  document.documentElement.style.removeProperty('--side-w');
+  try {
+    localStorage.removeItem(WIDTH_KEY);
+  } catch {
+    // Storage unavailable: nothing was saved.
+  }
+}
+
+try {
+  const saved = Number(localStorage.getItem(WIDTH_KEY));
+  if (saved > 0) setSideWidth(saved);
+} catch {
+  // Storage unavailable: start at the default width.
+}
+
+resizer.addEventListener('pointerdown', (ev) => {
+  if (narrow.matches || ev.button !== 0) return;
+  ev.preventDefault();
+  resizer.setPointerCapture(ev.pointerId);
+  document.body.classList.add('cx-resizing');
+  const move = (e) => setSideWidth(window.innerWidth - e.clientX);
+  const up = () => {
+    resizer.removeEventListener('pointermove', move);
+    document.body.classList.remove('cx-resizing');
+    if (sideWidth !== null) setSideWidth(sideWidth, { remember: true });
+  };
+  resizer.addEventListener('pointermove', move);
+  resizer.addEventListener('pointerup', up, { once: true });
+  resizer.addEventListener('pointercancel', up, { once: true });
+});
+resizer.addEventListener('keydown', (ev) => {
+  if (ev.key !== 'ArrowLeft' && ev.key !== 'ArrowRight') return;
+  ev.preventDefault();
+  const current = sideWidth ?? els.side.getBoundingClientRect().width;
+  setSideWidth(current + (ev.key === 'ArrowLeft' ? 24 : -24), { remember: true });
+});
+resizer.addEventListener('dblclick', resetSideWidth);
+window.addEventListener('resize', () => {
+  if (sideWidth !== null) setSideWidth(sideWidth); // keep within the new window's limits
+});
 
 // ---------------------------------------------------------------- text anchoring
 

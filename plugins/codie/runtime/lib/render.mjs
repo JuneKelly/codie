@@ -113,8 +113,46 @@ function renderList(lines, ordered) {
 }
 
 // Renders the body of a plain text block (no attribute tail).
+const TABLE_SEP_RE = /^\s*\|?\s*:?-+:?\s*(\|\s*:?-+:?\s*)*\|?\s*$/;
+
+// Splits a pipe-table row into cells, ignoring pipes escaped as \| or inside `code`.
+function tableCells(line) {
+  const row = line.trim().replace(/^\|/, '').replace(/\|$/, '');
+  const cells = [];
+  let cur = '';
+  let inCode = false;
+  for (let i = 0; i < row.length; i++) {
+    const ch = row[i];
+    if (ch === '\\' && row[i + 1] === '|') {
+      cur += '|';
+      i++;
+    } else if (ch === '`') {
+      inCode = !inCode;
+      cur += ch;
+    } else if (ch === '|' && !inCode) {
+      cells.push(cur.trim());
+      cur = '';
+    } else cur += ch;
+  }
+  cells.push(cur.trim());
+  return cells;
+}
+
+function renderTable(lines) {
+  const align = tableCells(lines[1]).map((c) => (c.startsWith(':') && c.endsWith(':') ? 'center' : c.endsWith(':') ? 'right' : c.startsWith(':') ? 'left' : null));
+  const cell = (tag, text, i) => `<${tag}${align[i] ? ` style="text-align:${align[i]}"` : ''}>${renderInline(text)}</${tag}>`;
+  const head = tableCells(lines[0]).map((c, i) => cell('th', c, i)).join('');
+  const body = lines
+    .slice(2)
+    .map((l) => `<tr>${tableCells(l).map((c, i) => cell('td', c, i)).join('')}</tr>`)
+    .join('');
+  // The wrapper scrolls sideways on its own, so a wide table never widens the page or a message.
+  return `<div class="cx-table-wrap"><table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table></div>`;
+}
+
 function renderTextBlock(lines) {
   const first = lines[0];
+  if (lines.length >= 2 && first.includes('|') && TABLE_SEP_RE.test(lines[1])) return renderTable(lines);
   const h = first.match(/^(#{1,6})\s+(.*)$/);
   if (h && lines.length === 1) return `<h${h[1].length}>${renderInline(h[2])}</h${h[1].length}>`;
   if (lines.length === 1 && /^(-{3,}|\*{3,})\s*$/.test(first)) return '<hr>';
