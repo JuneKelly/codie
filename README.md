@@ -9,6 +9,8 @@ model of what you know, and adapts the chapters you haven't reached yet.
 
 This repository is the tool: a Claude Code plugin. Your books live wherever you choose.
 
+![A chapter of "How Git Actually Works", with a highlighted passage and codie's answer to a question about it in the sidebar](docs/screenshots/reader.png)
+
 ## Install
 
 In Claude Code (2.1.275 or later):
@@ -59,6 +61,20 @@ session in its folder and run:
 For a commissioned book, the first `/codie:open` settles what the brief left open, proposes
 the syllabus, and writes chapter one. After that, it picks up where you left off.
 
+## Reading a book
+
+Select any passage and choose **Ask about this**, or message codie about the chapter or the
+whole book from the sidebar. Each chapter ends with retrieval checks: you answer in your own
+words, say how sure you are, and codie replies with feedback. When you mark a chapter finished,
+codie writes the next one, adjusted for what your questions and answers showed.
+
+![A retrieval check with the reader's answer and codie's feedback, beside the chapter conversation announcing that chapter 2 is ready](docs/screenshots/checks.png)
+
+The contents page shows which chapters are finished, ready, or not written yet. Its sidebar is
+a conversation about the book as a whole, for things like changing the plan.
+
+![The contents page, with a conversation in which codie agrees to change the plan for chapter 4](docs/screenshots/contents.png)
+
 ## What a book looks like
 
 ```
@@ -73,7 +89,8 @@ my-book/
 ```
 
 A book is plain files, so put it under git if you'd like a history of how it was revised.
-`examples/demo` is a small sample.
+`examples/demo` is a small sample: the first two chapters of "How Git Actually Works", the
+book in the screenshots.
 
 ## How it works
 
