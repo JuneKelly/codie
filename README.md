@@ -152,3 +152,8 @@ Try the reader without an agent:
 ```bash
 node plugins/zimone/runtime/bin/zimone.mjs serve examples/demo
 ```
+
+## License
+
+MIT; see [LICENSE](LICENSE). The vendored markdown-it is also MIT, under its own
+[licence](plugins/zimone/runtime/vendor/markdown-it/LICENSE).
