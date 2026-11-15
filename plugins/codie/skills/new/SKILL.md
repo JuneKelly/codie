@@ -9,9 +9,9 @@ allowed-tools: Bash(node ${CLAUDE_PLUGIN_ROOT}/runtime/bin/codie.mjs *)
 
 Topic seed from the user: $ARGUMENTS
 
-In this skill and in the reference files it points to, `$CODIE` means
-`node ${CLAUDE_PLUGIN_ROOT}/runtime/bin/codie.mjs`, and the plugin root is `${CLAUDE_PLUGIN_ROOT}`.
-Read `${CLAUDE_PLUGIN_ROOT}/reference/book.md` before creating any book files.
+In this skill and in the reference docs it points to, `$CODIE` means
+`node ${CLAUDE_PLUGIN_ROOT}/runtime/bin/codie.mjs`. Reference docs are printed by `$CODIE docs <name>`; don't read plugin files directly, since they're usually outside this session's folder.
+Read the book reference (`$CODIE docs book`) before creating any book files.
 
 ## Pick the mode
 
@@ -38,19 +38,21 @@ Do not write chapters in this session.
 2. **Fill the gaps** with one AskUserQuestion call (up to four questions): the goal if it's
    still unclear, time per week and overall length, tone, and how much active learning
    (light / regular / heavy checks). Skip anything already known.
-3. **Choose where the book goes.** Read `${CLAUDE_PLUGIN_DATA}/config.json` for a `library`
-   path.
-   - **No library yet**: ask the user where books should live, suggesting `~/codie-books`.
-     Then write `{"library": "<absolute path>"}` to that file, creating the folder.
+3. **Choose where the book goes.** Run `$CODIE library "${CLAUDE_PLUGIN_DATA}"`.
+   - **`library: unset`**: ask the user where books should live, suggesting `~/codie-books`.
+     Save their answer with `$CODIE library "${CLAUDE_PLUGIN_DATA}" --set <path>`, which also
+     creates the folder.
    - **Then** offer `<library>/<slug>` (recommended), a subfolder of this project, or another
-     path. The slug is lowercase and hyphenated.
-   - If the destination exists and isn't empty, stop and ask.
+     path. The slug is lowercase and hyphenated. Check the choice with `$CODIE detect <path>`:
+     if it's anything other than `missing` or `empty`, stop and ask.
+   - Writing into the book folder will ask the user's permission, because it's outside this
+     session's folder. Say so before you start.
 4. **Choose context to copy.** If material from this project would make the book better (a
    schema, a failing query, a config, a short code excerpt), list each item with a one-line
    reason and ask which to include. It may be private work, so copy only what they approve.
    Copy into `<book>/context/`, trimmed to what matters, with a first-line comment giving the
    source path and date.
-5. **Write the brief.** Create `<book>/brief.md` in the brief format from `reference/book.md`,
+5. **Write the brief.** Create `<book>/brief.md` in the brief format from the book reference,
    plus `<book>/.gitignore` containing `.codie/`. Put everything you didn't settle under
    **Still to settle**.
 6. **Hand off.** The book is written and taught in its own session, started in the book folder.
@@ -85,11 +87,11 @@ Then go to **Plan and write**.
 ## Plan and write
 
 1. In the book folder, create `book.json`, `plan.md` and `learner.md` as described in
-   `reference/book.md`, and a `.gitignore` containing `.codie/` if there isn't one. Fill
+   the book reference, and a `.gitignore` containing `.codie/` if there isn't one. Fill
    `learner.md`'s **Motivation** from the brief or the interview.
 2. Present the aim, objectives and syllabus in chat. Ask for approval with AskUserQuestion
    (approve / adjust), and revise until approved. Don't write chapters before approval.
-3. Write chapter one, following `reference/book.md`, and run `$CODIE check . <id>` until it
+3. Write chapter one, following the book reference, and run `$CODIE check . <id>` until it
    passes.
-4. Serve the book: read `${CLAUDE_PLUGIN_ROOT}/reference/serving.md` and follow it, with `.` as
+4. Serve the book: read the serving reference (`$CODIE docs serving`) and follow it, with `.` as
    the book. Keep handling reader events for the rest of the session.

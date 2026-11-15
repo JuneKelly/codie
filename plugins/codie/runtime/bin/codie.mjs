@@ -2,12 +2,15 @@
 // codie CLI: serve a book, stream reader events to the agent, and reply to them.
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { BookError, chapterExists, chapterFile, detectFolder, loadBook, resolveBookDir } from '../lib/book.mjs';
 import { renderChapter } from '../lib/render.mjs';
 import { DEFAULT_PORTS, serve, serverInfoFile } from '../lib/server.mjs';
 
 const USAGE = `usage:
-  codie detect [folder]               classify a folder: book | brief | empty | other | missing
+  codie docs   <book|serving>         print a reference doc for the agent
+  codie library <data-dir> [--set <path>]  show or set the book library folder
+  codie detect [folder]             classify a folder: book | brief | empty | other | missing
   codie serve  <book> [--port <n>]    serve the book (run in the background); default: first free
                                       port in ${DEFAULT_PORTS[0]}–${DEFAULT_PORTS[1]}
   codie url    <book>                 wait for the book's server and print its URL
@@ -110,6 +113,40 @@ async function main() {
   const [cmd, bookArg, ...rest] = process.argv.slice(2);
   if (!cmd || cmd === '-h' || cmd === '--help') {
     console.log(USAGE);
+    return;
+  }
+  if (cmd === 'docs') {
+    // Reference docs ship inside the plugin, usually outside the session's folder; printing them
+    // through the pre-approved CLI avoids a file-read permission prompt.
+    const refDir = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'reference');
+    const names = fs.readdirSync(refDir).filter((n) => n.endsWith('.md')).map((n) => n.slice(0, -3));
+    if (!bookArg || !names.includes(bookArg)) fail(`docs needs one of: ${names.join(', ')}`);
+    process.stdout.write(fs.readFileSync(path.join(refDir, `${bookArg}.md`), 'utf8'));
+    return;
+  }
+  if (cmd === 'library') {
+    // bookArg is the plugin data dir (${CLAUDE_PLUGIN_DATA}); config.json there holds {"library": "<abs path>"}.
+    if (!bookArg) fail('library needs the plugin data directory');
+    const configFile = path.join(path.resolve(bookArg), 'config.json');
+    const i = rest.indexOf('--set');
+    if (i === -1) {
+      if (!fs.existsSync(configFile)) {
+        console.log('library: unset');
+        return;
+      }
+      const cfg = JSON.parse(fs.readFileSync(configFile, 'utf8'));
+      if (typeof cfg.library !== 'string' || !path.isAbsolute(cfg.library)) fail(`${configFile}: "library" must be an absolute path`);
+      console.log(`library: ${cfg.library}`);
+      return;
+    }
+    const raw = rest[i + 1];
+    if (!raw) fail('library --set needs a path');
+    const lib = path.resolve(raw.replace(/^~(?=$|\/)/, process.env.HOME));
+    fs.mkdirSync(lib, { recursive: true });
+    fs.mkdirSync(path.dirname(configFile), { recursive: true });
+    const cfg = fs.existsSync(configFile) ? JSON.parse(fs.readFileSync(configFile, 'utf8')) : {};
+    fs.writeFileSync(configFile, JSON.stringify({ ...cfg, library: lib }, null, 2) + '\n');
+    console.log(`library: ${lib}`);
     return;
   }
   if (cmd === 'detect') {
