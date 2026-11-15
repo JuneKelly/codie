@@ -10,7 +10,7 @@
 <header class="cx-top">
   <a href="/" class="cx-book-title" id="cx-book-title">codie</a>
   <span class="cx-conn" id="cx-conn" data-state="connecting" title="Connection to the codie server">connecting</span>
-  <button type="button" class="cx-btn cx-btn-quiet" id="cx-toggle-side" aria-controls="cx-side" aria-expanded="false">Questions</button>
+  <button type="button" class="cx-btn cx-btn-quiet" id="cx-toggle-side" aria-controls="cx-side" aria-expanded="false">Ask codie</button>
 </header>
 
 <div class="cx-layout">
@@ -24,23 +24,26 @@
     <nav class="cx-pager" id="cx-pager"></nav>
   </main>
 
-  <aside class="cx-side" id="cx-side" aria-label="Questions about this chapter">
+  <aside class="cx-side" id="cx-side" aria-label="Talk to codie">
     <div class="cx-side-head">
-      <h2>Questions</h2>
-      <button type="button" class="cx-btn cx-btn-quiet" id="cx-ask-chapter">Ask about this chapter</button>
-      <button type="button" class="cx-close" id="cx-close-side" aria-label="Close questions" title="Close (Esc)">×</button>
+      <h2>Ask codie</h2>
+      <button type="button" class="cx-close" id="cx-close-side" aria-label="Close sidebar" title="Close (Esc)">×</button>
     </div>
-    <form class="cx-compose" id="cx-compose" hidden>
-      <blockquote class="cx-quote" id="cx-compose-quote" hidden></blockquote>
-      <textarea id="cx-compose-text" rows="4" placeholder="What would you like to ask?" required></textarea>
+    <div class="cx-side-scroll">
+      <div class="cx-threads" id="cx-threads"></div>
+      <p class="cx-empty" id="cx-threads-empty"></p>
+    </div>
+    <form class="cx-compose" id="cx-compose">
+      <div class="cx-attach" id="cx-compose-attach" hidden>
+        <span class="cx-attach-quote" id="cx-compose-quote"></span>
+        <button type="button" class="cx-close" id="cx-compose-unquote" aria-label="Remove passage" title="Remove passage (Esc)">×</button>
+      </div>
+      <textarea id="cx-compose-text" rows="2" aria-label="Message to codie"></textarea>
       <div class="cx-row">
-        <button type="submit" class="cx-btn">Ask</button>
-        <button type="button" class="cx-btn cx-btn-quiet" id="cx-compose-cancel">Cancel</button>
+        <button type="submit" class="cx-btn">Send</button>
         <span class="cx-hint">⌘↵ to send</span>
       </div>
     </form>
-    <div class="cx-threads" id="cx-threads"></div>
-    <p class="cx-empty" id="cx-threads-empty">Select any passage to ask about it.</p>
   </aside>
 </div>
 

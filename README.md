@@ -1,10 +1,11 @@
 # codie
 
 Books you can talk to. Claude interviews you about what you want to learn, plans a course,
-and writes it as a book: a folder of chapters you read in the browser. You can select any
-passage and ask about it, answer retrieval checks, and mark chapters finished. All of that
-comes back to the Claude Code session that's teaching you, which answers, adds margin notes,
-keeps a model of what you know, and adapts the chapters you haven't reached yet.
+and writes it as a book: a folder of chapters you read in the browser. You can talk to codie
+from a sidebar on every page, about the book, the chapter, or a passage you've selected. You
+can also answer retrieval checks and mark chapters finished. All of that comes back to the
+Claude Code session that's teaching you. It answers on the page, adds margin notes, keeps a
+model of what you know, and adapts the chapters you haven't reached yet.
 
 This repository is the tool: a Claude Code plugin. Your books live wherever you choose.
 
@@ -88,7 +89,7 @@ browser ──HTTP/SSE──▶ codie server ◀──claim── codie watch �
 |---|---|
 | `plugins/codie/skills/new`, `skills/open` | The two skills |
 | `plugins/codie/reference/` | Shared agent instructions: book format and authoring, serving and event handling |
-| `plugins/codie/runtime/bin/codie.mjs` | CLI: `docs`, `library`, `detect`, `serve`, `url`, `watch`, `reply`, `ack`, `thread`, `check`. The skills pre-approve it, and route reference docs and plugin settings through it, so they don't trigger file-permission prompts |
+| `plugins/codie/runtime/bin/codie.mjs` | CLI: `docs`, `library`, `detect`, `serve`, `url`, `watch`, `reply`, `say`, `ack`, `thread`, `check`. The skills pre-approve it, and route reference docs and plugin settings through it, so they don't trigger file-permission prompts |
 | `plugins/codie/runtime/lib/` | Chapter renderer and validator, book loader, HTTP server |
 | `plugins/codie/runtime/shell/` | The reader page |
 | `.claude-plugin/marketplace.json` | Makes this repo its own one-plugin marketplace |

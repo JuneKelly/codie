@@ -153,6 +153,19 @@ export async function serve(dir, { port }) {
     return e;
   };
 
+  // One ongoing conversation per chapter, plus one for the whole book (chapter: null).
+  const conversationFor = (chapter) => {
+    if (chapter !== null && !loadBook(dir).chapters.some((c) => c.id === chapter)) {
+      throw new HttpError(404, `chapter "${chapter}" is not listed in book.json`);
+    }
+    let t = Object.values(store.data.threads).find((x) => x.kind === 'conversation' && x.chapter === chapter);
+    if (!t) {
+      t = { id: store.nextId('t'), kind: 'conversation', chapter, block_id: null, quote: null, prefix: '', suffix: '', created: new Date().toISOString(), messages: [] };
+      store.data.threads[t.id] = t;
+    }
+    return t;
+  };
+
   const routes = {
     'GET /api/book': () => {
       const book = loadBook(dir);
@@ -166,9 +179,13 @@ export async function serve(dir, { port }) {
       return { ...ch, finished: Boolean(store.data.finished[id]) };
     },
     'GET /api/threads': (_req, _p, query) => {
+      const all = Object.values(store.data.threads);
+      if (query.get('scope') === 'book') {
+        return { threads: all.filter((t) => t.kind === 'conversation' && t.chapter === null).map((t) => store.publicThread(t)) };
+      }
       const chapter = query.get('chapter');
-      if (!chapter) throw new HttpError(400, '"chapter" query parameter is required');
-      return { threads: Object.values(store.data.threads).filter((t) => t.chapter === chapter).map((t) => store.publicThread(t)) };
+      if (!chapter) throw new HttpError(400, '"chapter" (or scope=book) query parameter is required');
+      return { threads: all.filter((t) => t.chapter === chapter).map((t) => store.publicThread(t)) };
     },
     'GET /api/thread/:id': (_req, { id }) => store.publicThread(store.thread(id)),
 
@@ -216,6 +233,19 @@ export async function serve(dir, { port }) {
       return store.publicThread(thread);
     },
 
+    // Reader message to the chapter's conversation, or the book's when "chapter" is null or absent.
+    'POST /api/message': (body) => {
+      const text = str(body, 'text');
+      const chapter = str(body, 'chapter', { optional: true });
+      const thread = conversationFor(chapter);
+      thread.messages.push({ role: 'reader', text, at: new Date().toISOString() });
+      const e = newEvent('message', thread.id, null);
+      e.payload = { id: e.id, type: 'message', thread_id: thread.id, scope: chapter ? 'chapter' : 'book', chapter, text };
+      store.save();
+      broadcastThread(thread);
+      return store.publicThread(thread);
+    },
+
     'POST /api/answer': (body) => {
       const chapter = str(body, 'chapter');
       const checkId = str(body, 'check_id');
@@ -257,13 +287,22 @@ export async function serve(dir, { port }) {
       const next = book.chapters[idx + 1] ?? null;
       store.data.finished[chapter] = new Date().toISOString();
       const pending = store.data.events.some((e) => e.type === 'chapter_finished' && !e.handled_at && e.payload.chapter === chapter);
+      let thread = null;
       if (!pending) {
-        const e = newEvent('chapter_finished', null, null);
-        e.payload = { id: e.id, type: 'chapter_finished', chapter, next_chapter: next?.id ?? null, next_exists: next ? chapterExists(dir, next.id) : false };
+        // The finish shows in the chapter's conversation, and codie answers there when the next chapter is ready.
+        thread = conversationFor(chapter);
+        thread.messages.push({
+          role: 'system',
+          text: next ? 'You marked this chapter finished. codie will prepare the next one.' : 'You marked the last chapter finished.',
+          at: new Date().toISOString(),
+        });
+        const e = newEvent('chapter_finished', thread.id, null);
+        e.payload = { id: e.id, type: 'chapter_finished', thread_id: thread.id, chapter, next_chapter: next?.id ?? null, next_exists: next ? chapterExists(dir, next.id) : false };
+        broadcastThread(thread);
       }
       store.save();
       broadcast({ type: 'book' });
-      return { ok: true };
+      return { ok: true, thread: thread && store.publicThread(thread) };
     },
 
     // Agent side ------------------------------------------------------------
@@ -295,6 +334,16 @@ export async function serve(dir, { port }) {
       store.save();
       broadcastThread(t);
       return { ok: true, thread_id: t.id };
+    },
+    // Agent-initiated message into a conversation (no event involved).
+    'POST /api/say': (body) => {
+      const text = str(body, 'text');
+      const chapter = str(body, 'chapter', { optional: true });
+      const thread = conversationFor(chapter);
+      thread.messages.push({ role: 'codie', text, at: new Date().toISOString() });
+      store.save();
+      broadcastThread(thread);
+      return { ok: true, thread_id: thread.id };
     },
     'POST /api/ack': (body) => {
       const e = store.event(str(body, 'event_id'));

@@ -12,11 +12,11 @@ const els = {
   finishBtn: $('cx-finish-btn'),
   finishNote: $('cx-finish-note'),
   pager: $('cx-pager'),
-  askChapter: $('cx-ask-chapter'),
   compose: $('cx-compose'),
+  composeAttach: $('cx-compose-attach'),
   composeQuote: $('cx-compose-quote'),
+  composeUnquote: $('cx-compose-unquote'),
   composeText: $('cx-compose-text'),
-  composeCancel: $('cx-compose-cancel'),
   threads: $('cx-threads'),
   empty: $('cx-threads-empty'),
   askSel: $('cx-ask-sel'),
@@ -238,6 +238,7 @@ function statusLine(t) {
 }
 
 function messageEl(m) {
+  if (m.role === 'system') return el('div', { class: 'cx-msg cx-msg-system', text: m.text });
   if (m.role === 'codie') {
     return el('div', { class: 'cx-msg cx-msg-codie' }, el('div', { class: 'cx-msg-label', text: 'codie' }), el('div', { html: m.html }));
   }
@@ -304,6 +305,7 @@ function openThread(id) {
 function chipText(t) {
   if (t.status === 'queued') return 'waiting';
   if (t.status === 'delivered') return 'thinking…';
+  if (t.kind === 'conversation') return t.messages.length === 1 ? '1 message' : `${t.messages.length} messages`;
   const n = replyCount(t);
   return n === 0 ? 'no reply' : n === 1 ? '1 reply' : `${n} replies`;
 }
@@ -316,12 +318,17 @@ const ANCHOR_NOTES = {
 function threadCard(t) {
   const open = state.openThread === t.id;
   const note = ANCHOR_NOTES[state.anchors.get(t.id)];
-  const firstQuestion = t.messages.find((m) => m.role === 'reader')?.text ?? '';
+  const convo = t.kind === 'conversation';
+  // A conversation previews its latest message; a passage thread previews the question that started it.
+  const rawPreview = convo ? (t.messages[t.messages.length - 1]?.text ?? '') : (t.messages.find((m) => m.role === 'reader')?.text ?? '');
+  // codie's messages are Markdown; show links and emphasis as plain text in the one-line preview.
+  const preview = rawPreview.replace(/\[([^\]]+)\]\([^)]*\)/g, '$1').replace(/[*_`#>]/g, '');
+  const label = convo ? (t.chapter ? 'Conversation about this chapter' : 'Conversation about the book') : (t.quote ?? 'About the whole chapter');
   const head = el(
     'button',
     { type: 'button', class: 'cx-thread-head', 'aria-expanded': String(open), onclick: () => openThread(open ? null : t.id) },
-    el('span', { class: t.quote ? 'cx-thread-quote' : 'cx-thread-quote cx-thread-chapter', text: t.quote ?? 'About the whole chapter' }),
-    open ? null : el('span', { class: 'cx-thread-q', text: firstQuestion }),
+    el('span', { class: t.quote ? 'cx-thread-quote' : 'cx-thread-quote cx-thread-chapter', text: label }),
+    open ? null : el('span', { class: 'cx-thread-q', text: preview }),
     el(
       'span',
       { class: 'cx-thread-tags' },
@@ -330,7 +337,7 @@ function threadCard(t) {
       note ? el('span', { class: 'cx-detached', text: note[0] }) : null,
     ),
   );
-  const card = el('div', { class: 'cx-thread', 'data-thread-id': t.id, 'data-open': String(open) }, head);
+  const card = el('div', { class: convo ? 'cx-thread cx-thread-convo' : 'cx-thread', 'data-thread-id': t.id, 'data-open': String(open) }, head);
   if (!open) return card;
 
   const body = el('div', { class: 'cx-thread-body' });
@@ -339,6 +346,11 @@ function threadCard(t) {
   for (const m of t.messages) body.append(messageEl(m));
   const status = statusLine(t);
   if (status) body.append(status);
+  if (convo) {
+    // The message box at the bottom of the sidebar is this conversation's input.
+    card.append(body);
+    return card;
+  }
 
   const text = el('textarea', { rows: 1, placeholder: 'Follow up…', required: true });
   text.value = state.drafts.get(t.id) ?? '';
@@ -376,10 +388,15 @@ function blockOrder() {
 
 function renderThreads() {
   const order = blockOrder();
-  const asks = [...state.threads.values()].filter((t) => t.kind === 'ask');
+  const all = [...state.threads.values()];
+  const convo = all.filter((t) => t.kind === 'conversation');
+  const asks = all.filter((t) => t.kind === 'ask');
   asks.sort((a, b) => (order.get(a.block_id) ?? -1) - (order.get(b.block_id) ?? -1) || a.created.localeCompare(b.created));
-  els.threads.replaceChildren(...asks.map(threadCard));
-  els.empty.hidden = asks.length > 0;
+  els.threads.replaceChildren(...[...convo, ...asks].map(threadCard));
+  els.empty.hidden = convo.length + asks.length > 0;
+  els.empty.textContent = state.chapterId
+    ? 'Message codie below, or select a passage to ask about it.'
+    : 'Message codie below about the book: what to cover next, how it’s going, anything.';
 }
 
 function replaceCard(t) {
@@ -401,17 +418,14 @@ function upsertThread(t) {
   const visible = t.id === state.openThread && document.body.classList.contains('cx-side-open');
   if (visible) markSeen(t);
   replaceCard(t);
-  const last = t.messages[t.messages.length - 1];
-  if (prev && prev.status !== 'answered' && t.status === 'answered' && last?.role === 'codie') {
-    if (visible) toast('codie answered');
-    else
-      toast('codie answered', {
-        label: 'Show',
-        run: () => {
-          openSide();
-          openThread(t.id);
-        },
-      });
+  if (prev && replyCount(t) > replyCount(prev) && !visible) {
+    toast(t.kind === 'conversation' ? 'New message from codie' : 'codie answered', {
+      label: 'Show',
+      run: () => {
+        openSide();
+        openThread(t.id);
+      },
+    });
   }
 }
 
@@ -502,6 +516,7 @@ async function loadChapter(id, { preserve = false } = {}) {
     return;
   }
   state.chapterId = id;
+  els.composeText.placeholder = composePlaceholder();
   els.title.textContent = book.title;
   document.title = `${ch.title} · ${book.title}`;
 
@@ -542,9 +557,9 @@ async function loadChapter(id, { preserve = false } = {}) {
 
 async function loadToc() {
   document.body.classList.add('cx-toc-view');
-  let book;
+  let book, threads;
   try {
-    book = await api('/api/book');
+    [book, { threads }] = await Promise.all([api('/api/book'), api('/api/threads?scope=book')]);
   } catch (err) {
     els.banner.hidden = false;
     els.banner.textContent = err.message;
@@ -560,42 +575,44 @@ async function loadToc() {
   els.content.replaceChildren(
     el('div', { class: 'cx-toc' }, el('h1', { text: book.title }), book.subtitle ? el('p', { class: 'cx-subtitle', text: book.subtitle }) : null, el('h2', { text: 'Contents' }), el('ol', {}, ...items)),
   );
+  state.threads = new Map(threads.map((t) => [t.id, t]));
+  els.composeText.placeholder = composePlaceholder();
+  renderThreads();
 }
 
 // ---------------------------------------------------------------- compose
 
-function openCompose(anchor) {
+const composePlaceholder = () =>
+  state.pendingAnchor ? 'Ask about this passage…' : state.chapterId ? 'Message codie about this chapter…' : 'Message codie about this book…';
+
+// Attaches a passage to the message box (or detaches it with null).
+function attachPassage(anchor) {
   state.pendingAnchor = anchor;
-  els.composeQuote.hidden = !anchor;
+  els.composeAttach.hidden = !anchor;
   els.composeQuote.textContent = anchor ? anchor.quote : '';
-  els.compose.hidden = false;
+  els.composeText.placeholder = composePlaceholder();
+}
+
+function focusCompose(anchor) {
+  attachPassage(anchor);
   openSide();
   els.composeText.focus();
 }
 
-function closeCompose() {
-  els.compose.hidden = true;
-  els.composeText.value = '';
-  state.pendingAnchor = null;
-}
-
 els.compose.addEventListener('submit', async (ev) => {
   ev.preventDefault();
-  const question = els.composeText.value.trim();
-  if (!question) return;
+  const text = els.composeText.value.trim();
+  if (!text) return;
   const a = state.pendingAnchor;
   const btn = els.compose.querySelector('button[type=submit]');
   btn.disabled = true;
   try {
-    const t = await api('/api/ask', {
-      chapter: state.chapterId,
-      block_id: a?.block_id ?? null,
-      quote: a?.quote ?? null,
-      prefix: a?.prefix ?? null,
-      suffix: a?.suffix ?? null,
-      question,
-    });
-    closeCompose();
+    // With a passage attached, the message starts its own thread; otherwise it joins the conversation.
+    const t = a
+      ? await api('/api/ask', { chapter: state.chapterId, block_id: a.block_id, quote: a.quote, prefix: a.prefix, suffix: a.suffix, question: text })
+      : await api('/api/message', { chapter: state.chapterId, text });
+    els.composeText.value = '';
+    attachPassage(null);
     getSelection().removeAllRanges();
     upsertThread(t);
     openThread(t.id);
@@ -607,10 +624,12 @@ els.compose.addEventListener('submit', async (ev) => {
 });
 els.composeText.addEventListener('keydown', (ev) => {
   if (ev.key === 'Enter' && (ev.metaKey || ev.ctrlKey)) els.compose.requestSubmit();
-  if (ev.key === 'Escape') closeCompose();
+  if (ev.key === 'Escape' && state.pendingAnchor) attachPassage(null);
 });
-els.composeCancel.addEventListener('click', closeCompose);
-els.askChapter.addEventListener('click', () => openCompose(null));
+els.composeUnquote.addEventListener('click', () => {
+  attachPassage(null);
+  els.composeText.focus();
+});
 els.toggle.addEventListener('click', () => setSide(!document.body.classList.contains('cx-side-open'), { remember: true }));
 els.closeSide.addEventListener('click', () => {
   setSide(false, { remember: true });
@@ -646,7 +665,7 @@ window.addEventListener('scroll', () => (els.askSel.hidden = true), { passive: t
 els.askSel.addEventListener('mousedown', (ev) => ev.preventDefault());
 els.askSel.addEventListener('click', () => {
   els.askSel.hidden = true;
-  if (state.selAnchor) openCompose(state.selAnchor);
+  if (state.selAnchor) focusCompose(state.selAnchor);
 });
 
 els.content.addEventListener('click', (ev) => {
@@ -659,8 +678,13 @@ els.content.addEventListener('click', (ev) => {
 els.finishBtn.addEventListener('click', async () => {
   els.finishBtn.disabled = true;
   try {
-    await api('/api/finished', { chapter: state.chapterId });
+    const { thread } = await api('/api/finished', { chapter: state.chapterId });
     els.finishNote.textContent = 'Marked finished. codie will prepare what comes next.';
+    if (thread) {
+      upsertThread(thread);
+      openSide();
+      openThread(thread.id);
+    }
   } catch (err) {
     reportError(err);
   } finally {

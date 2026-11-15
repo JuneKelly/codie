@@ -16,6 +16,8 @@ const USAGE = `usage:
   codie url    <book>                 wait for the book's server and print its URL
   codie watch  <book>                 print one CODIE_EVENT line per reader event (for Monitor)
   codie reply  <book> <event-id>      reply to an ask/check event; reply Markdown on stdin
+  codie say    <book> [--chapter <id>]  post to a chapter's conversation (default: the book's);
+                                      Markdown on stdin
   codie ack    <book> <event-id>      mark an event handled without replying
   codie thread <book> <thread-id>     print a thread's history
   codie check  <book> [chapter-id]    validate book.json and chapter files`;
@@ -46,7 +48,7 @@ async function call(dir, method, route, body) {
 }
 
 async function readStdin() {
-  if (process.stdin.isTTY) throw new Error('reply text must be piped on stdin');
+  if (process.stdin.isTTY) throw new Error('message text must be piped on stdin');
   const chunks = [];
   for await (const c of process.stdin) chunks.push(c);
   return Buffer.concat(chunks).toString('utf8').trim();
@@ -181,6 +183,16 @@ async function main() {
       if (!text) fail('reply text on stdin is empty');
       const r = await call(dir, 'POST', '/api/reply', { event_id: eventId, text });
       console.log(`replied to ${eventId} in thread ${r.thread_id}`);
+      return;
+    }
+    case 'say': {
+      const i = rest.indexOf('--chapter');
+      const chapter = i === -1 ? null : rest[i + 1];
+      if (i !== -1 && !chapter) fail('--chapter needs a chapter id');
+      const text = await readStdin();
+      if (!text) fail('message text on stdin is empty');
+      const r = await call(dir, 'POST', '/api/say', { chapter, text });
+      console.log(`posted to ${chapter ? `chapter ${chapter}` : 'the book'} conversation (thread ${r.thread_id})`);
       return;
     }
     case 'ack': {

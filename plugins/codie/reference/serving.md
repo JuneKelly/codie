@@ -41,6 +41,19 @@ EOF
 
 Use `$CODIE ack <book> <event-id>` for events that need no reply.
 
+To post without being asked, use `say`. It goes into a chapter's conversation (`--chapter <id>`)
+or, without the flag, the book's conversation, which shows on the contents page:
+
+```bash
+$CODIE say <book> --chapter 02-indexes <<'EOF'
+Preparing chapter 3. Your check on O2 was shaky, so it opens with a short review.
+EOF
+```
+
+**The page is the reader's main channel**, so put updates and questions meant for them there,
+not in the terminal. Keep `say` to milestones and decisions; don't narrate routine work. Link
+to a chapter with `[Title](/c/<chapter-id>)`.
+
 ### `ask`
 
 Fields: `thread_id, chapter, block_id, follow_up, question, quote`. `block_id` is null for a
@@ -59,6 +72,18 @@ question about the whole chapter. For a follow-up you don't remember, run `$CODI
      chapters or the syllabus (`book.json`, `plan.md`), and log the change under Amendments.
 3. **Log the inquiry** in `learner.md` under Inquiry log.
 
+### `message`
+
+Fields: `thread_id, scope ("chapter" or "book"), chapter, text`. The reader wrote in a
+conversation rather than about a passage: chat about the chapter or the book, a request ("more
+examples please"), feedback, or "I'm stopping for today". Reply conversationally with
+`$CODIE reply`, and act on requests. If it changes the plan or the unwritten chapters, log it
+under Amendments in `plan.md` and say what you changed. Note anything it tells you about the
+reader in `learner.md`.
+
+If you need the reader to decide something mid-book (say, whether to add a chapter), ask in the
+conversation with `say` rather than in the terminal, and act on their reply.
+
 ### `check_answer`
 
 Fields: `thread_id, chapter, check_id, objective, attempt, confidence (1–3), confidence_label,
@@ -76,16 +101,19 @@ response`. Read the check's question in the chapter file.
 
 ### `chapter_finished`
 
-Fields: `chapter, next_chapter, next_exists`. Ack it, then:
+Fields: `thread_id, chapter, next_chapter, next_exists`. The thread is the finished chapter's
+conversation, where the reader is waiting.
 
 1. Review `learner.md` (this chapter's checks and inquiries) against `plan.md`.
-2. Write or revise the next chapter to address what you saw: review a shaky objective, skip
+2. `say` into that chapter's conversation, in one or two sentences, what the next chapter will
+   do differently because of how this one went, or that it'll follow the plan as is.
+3. Write or revise the next chapter to address what you saw: review a shaky objective, skip
    what's secure, or follow a thread of interest. Log plan changes under Amendments.
-3. Run `$CODIE check`, then tell the user in chat that the next chapter is ready. The page's
-   contents update automatically.
+4. Run `$CODIE check`, then `reply` to the event with a link: `[<title>](/c/<next_chapter>) is
+   ready.` The contents page updates automatically.
 
-If `next_chapter` is null, the book is complete. Summarise their progress against the
-objectives in chat and offer to extend the book.
+If `next_chapter` is null, the book is complete. Reply with a short summary of their progress
+against the objectives, and offer to extend the book.
 
 ## Rules
 
