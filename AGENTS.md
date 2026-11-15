@@ -24,6 +24,10 @@ answers and finished chapters flow back to that session through a Monitor runnin
 | `docs/screenshots/` | README images, taken from `examples/demo` |
 | `scripts/screenshots/` | `take.mjs` retakes the README images; `seed.mjs` is the reader activity they show |
 | `docs/DESIGN.md` | How zimone works and why |
+| `docs/API.md` | The HTTP, event-stream and event contract between server, page and CLI |
+| `docs/TESTING.md` | How to test changes by hand, including a live tutoring test |
+| `docs/transcripts/` | Numbered summaries of past working sessions: decisions, reasons, lessons |
+| `CHANGELOG.md` | What each plugin version gave users |
 | `.claude/skills/version-bump/` | Project skill: when and how to bump the plugin version |
 
 ## Commands
@@ -37,9 +41,9 @@ node plugins/zimone/runtime/bin/zimone.mjs serve examples/demo    # try the read
 node plugins/zimone/runtime/bin/zimone.mjs url examples/demo      # the URL that server is on
 ```
 
-There is no automated test suite. Validate changes by running the CLI against a scratch copy of
-`examples/demo`: post to the HTTP API (as the page would), then exercise `watch`, `reply`, `say`,
-`ack` and `thread`, and look at the page in a browser for UI changes.
+There is no automated test suite. [docs/TESTING.md](docs/TESTING.md) has the manual checks:
+the CLI and HTTP API against a scratch copy of `examples/demo`, the page in a browser, and a live
+tutoring test with a real session.
 
 ## Rules
 
@@ -81,7 +85,8 @@ direct instructions: say what to do and when, and keep them short. The README an
 - Push only when the user says so.
 - Before pushing changes under `plugins/zimone/`, follow the `version-bump` skill: installed users
   don't receive a change until `version` in `plugin.json` is bumped. Bump in its own commit,
-  `Bump zimone to X.Y.Z`.
+  `Bump zimone to X.Y.Z`, with a `CHANGELOG.md` entry.
+- Changes to anything in [docs/API.md](docs/API.md) need that file updated in the same commit.
 - If a UI change makes the README screenshots out of date, retake them with
   `node scripts/screenshots/take.mjs` (needs Google Chrome; it works on a scratch copy and its own
   port).

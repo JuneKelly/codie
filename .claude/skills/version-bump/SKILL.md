@@ -46,9 +46,10 @@ If a change alters what's stored in a book (`book.json`, the chapter format, or
 
 ## Doing it
 
-1. Edit `version` in `plugins/zimone/.claude-plugin/plugin.json`.
+1. Edit `version` in `plugins/zimone/.claude-plugin/plugin.json`, and add an entry at the top of
+   `CHANGELOG.md` saying what the release gives users.
 2. Run `claude plugin validate .` and confirm it passes.
-3. Commit on `main` as `Bump zimone to X.Y.Z`. In the body, summarise what the release contains
+3. Commit both on `main` as `Bump zimone to X.Y.Z`. In the body, summarise what the release contains
    for users.
 4. Push only when the user says to. When asking to push, say that the push includes the bump
    and why it's a minor or patch.
