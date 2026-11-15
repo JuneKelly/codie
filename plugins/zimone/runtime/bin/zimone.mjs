@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// codie CLI: serve a book, stream reader events to the agent, and reply to them.
+// zimone CLI: serve a book, stream reader events to the agent, and reply to them.
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -8,30 +8,30 @@ import { renderChapter } from '../lib/render.mjs';
 import { DEFAULT_PORTS, serve, serverInfoFile } from '../lib/server.mjs';
 
 const USAGE = `usage:
-  codie docs   <book|serving>         print a reference doc for the agent
-  codie library <data-dir> [--set <path>]  show or set the book library folder
-  codie detect [folder]             classify a folder: book | brief | empty | other | missing
-  codie serve  <book> [--port <n>]    serve the book (run in the background); default: first free
+  zimone docs   <book|serving>         print a reference doc for the agent
+  zimone library <data-dir> [--set <path>]  show or set the book library folder
+  zimone detect [folder]             classify a folder: book | brief | empty | other | missing
+  zimone serve  <book> [--port <n>]    serve the book (run in the background); default: first free
                                       port in ${DEFAULT_PORTS[0]}–${DEFAULT_PORTS[1]}
-  codie url    <book>                 wait for the book's server and print its URL
-  codie watch  <book>                 print one CODIE_EVENT line per reader event (for Monitor)
-  codie reply  <book> <event-id>      reply to an ask/check event; reply Markdown on stdin
-  codie say    <book> [--chapter <id>]  post to a chapter's conversation (default: the book's);
+  zimone url    <book>                 wait for the book's server and print its URL
+  zimone watch  <book>                 print one ZIMONE_EVENT line per reader event (for Monitor)
+  zimone reply  <book> <event-id>      reply to an ask/check event; reply Markdown on stdin
+  zimone say    <book> [--chapter <id>]  post to a chapter's conversation (default: the book's);
                                       Markdown on stdin
-  codie ack    <book> <event-id>      mark an event handled without replying
-  codie thread <book> <thread-id>     print a thread's history
-  codie check  <book> [chapter-id]    validate book.json and chapter files`;
+  zimone ack    <book> <event-id>      mark an event handled without replying
+  zimone thread <book> <thread-id>     print a thread's history
+  zimone check  <book> [chapter-id]    validate book.json and chapter files`;
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 function fail(msg) {
-  console.error(`codie: ${msg}`);
+  console.error(`zimone: ${msg}`);
   process.exit(1);
 }
 
 function serverBase(dir) {
   const file = serverInfoFile(dir);
-  if (!fs.existsSync(file)) throw new Error(`no codie server is running for ${dir} (${file} is missing); start one with: codie serve ${path.relative(process.cwd(), dir) || '.'}`);
+  if (!fs.existsSync(file)) throw new Error(`no zimone server is running for ${dir} (${file} is missing); start one with: zimone serve ${path.relative(process.cwd(), dir) || '.'}`);
   const { port } = JSON.parse(fs.readFileSync(file, 'utf8'));
   return `http://127.0.0.1:${port}`;
 }
@@ -73,12 +73,12 @@ async function watch(dir) {
       for (const e of events) {
         if (seen.has(e.id)) continue;
         seen.add(e.id);
-        console.log(`CODIE_EVENT ${JSON.stringify(e)}`);
+        console.log(`ZIMONE_EVENT ${JSON.stringify(e)}`);
       }
     } catch (err) {
       failures += 1;
       if (failures >= limit) {
-        console.log(`CODIE_ERROR codie server unreachable after ${limit} attempts: ${err.message}`);
+        console.log(`ZIMONE_ERROR zimone server unreachable after ${limit} attempts: ${err.message}`);
         process.exit(1);
       }
     }
@@ -168,7 +168,7 @@ async function main() {
     case 'url': {
       const file = serverInfoFile(dir);
       for (let waited = 0; !fs.existsSync(file); waited += 200) {
-        if (waited >= 10000) fail(`no codie server came up for ${dir} within 10s (${file} is missing)`);
+        if (waited >= 10000) fail(`no zimone server came up for ${dir} within 10s (${file} is missing)`);
         await sleep(200);
       }
       console.log(`${serverBase(dir)}/`);

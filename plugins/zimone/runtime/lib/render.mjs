@@ -1,4 +1,4 @@
-// Renders codie chapter Markdown into HTML.
+// Renders zimone chapter Markdown into HTML.
 //
 // Chapter format (see reference/book.md for the authoring spec):
 //   - Top-level blocks are separated by blank lines.

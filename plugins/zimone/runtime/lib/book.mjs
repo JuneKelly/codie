@@ -23,8 +23,9 @@ export function loadBook(dir) {
   } catch (err) {
     throw new BookError(`cannot read ${file}: ${err.message}`, { cause: err });
   }
-  if (data.codie_format === undefined) throw new BookError(`${file}: missing "codie_format" (expected ${BOOK_FORMAT}); is this a codie book?`);
-  if (data.codie_format !== BOOK_FORMAT) throw new BookError(`${file}: codie_format ${JSON.stringify(data.codie_format)} is not supported (this codie reads format ${BOOK_FORMAT})`);
+  if (data.zimone_format === undefined && data.codie_format !== undefined) throw new BookError(`${file}: this book was made by codie, zimone's old name; rename "codie_format" to "zimone_format" in book.json, the .codie folder to .zimone, and .codie/ to .zimone/ in .gitignore`);
+  if (data.zimone_format === undefined) throw new BookError(`${file}: missing "zimone_format" (expected ${BOOK_FORMAT}); is this a zimone book?`);
+  if (data.zimone_format !== BOOK_FORMAT) throw new BookError(`${file}: zimone_format ${JSON.stringify(data.zimone_format)} is not supported (this zimone reads format ${BOOK_FORMAT})`);
   if (typeof data.title !== 'string' || !data.title.trim()) throw new BookError(`${file}: "title" must be a non-empty string`);
   if (!Array.isArray(data.chapters) || data.chapters.length === 0) throw new BookError(`${file}: "chapters" must be a non-empty array`);
   const ids = new Set();
@@ -63,7 +64,7 @@ export function readChapter(dir, id) {
   };
 }
 
-// Classifies a folder for /codie:new: 'book' (has book.json), 'brief' (has brief.md),
+// Classifies a folder for /zimone:new: 'book' (has book.json), 'brief' (has brief.md),
 // 'empty' (nothing but dotfiles), 'other', or 'missing'.
 export function detectFolder(dir) {
   const abs = path.resolve(dir);

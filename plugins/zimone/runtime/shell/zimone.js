@@ -1,4 +1,4 @@
-// codie reader: renders a chapter, anchors questions to passages, and talks to the codie server.
+// zimone reader: renders a chapter, anchors questions to passages, and talks to the zimone server.
 
 const $ = (id) => document.getElementById(id);
 const els = {
@@ -93,7 +93,7 @@ function setConn(s) {
 
 // Sidebar state. Wide screens default to open and remember the reader's choice; narrow screens
 // show it as an overlay that starts closed. Both classes are set so either layout reads them.
-const SIDE_KEY = 'codie.sideClosed';
+const SIDE_KEY = 'zimone.sideClosed';
 const narrow = window.matchMedia('(max-width: 900px)');
 
 function setSide(open, { remember = false } = {}) {
@@ -125,7 +125,7 @@ function openSide() {
 setSide(initialSideOpen());
 
 // Sidebar width (wide screens only): drag the left edge, use arrow keys on it, double-click to reset.
-const WIDTH_KEY = 'codie.sideWidth';
+const WIDTH_KEY = 'zimone.sideWidth';
 const MIN_SIDE_W = 280;
 const maxSideWidth = () => Math.max(MIN_SIDE_W, Math.min(760, Math.round(window.innerWidth * 0.6)));
 const resizer = $('cx-resize');
@@ -295,25 +295,25 @@ function selectionAnchor() {
 // ---------------------------------------------------------------- threads
 
 function statusLine(t) {
-  if (t.status === 'queued') return el('div', { class: 'cx-status', text: 'Waiting for codie…' });
-  if (t.status === 'delivered') return el('div', { class: 'cx-status', text: 'codie is thinking…' });
+  if (t.status === 'queued') return el('div', { class: 'cx-status', text: 'Waiting for zimone…' });
+  if (t.status === 'delivered') return el('div', { class: 'cx-status', text: 'zimone is thinking…' });
   return null;
 }
 
 function messageEl(m) {
   if (m.role === 'system') return el('div', { class: 'cx-msg cx-msg-system', text: m.text });
-  if (m.role === 'codie') {
-    return el('div', { class: 'cx-msg cx-msg-codie' }, el('div', { class: 'cx-msg-label', text: 'codie' }), el('div', { html: m.html }));
+  if (m.role === 'zimone') {
+    return el('div', { class: 'cx-msg cx-msg-zimone' }, el('div', { class: 'cx-msg-label', text: 'zimone' }), el('div', { html: m.html }));
   }
   const conf = m.confidence ? ` · ${['', 'guessing', 'fairly sure', 'certain'][m.confidence]}` : '';
   return el('div', { class: 'cx-msg' }, conf ? el('div', { class: 'cx-msg-label', text: `Your answer${conf}` }) : null, el('div', { class: 'cx-msg-reader', text: m.text }));
 }
 
-// Which replies the reader has seen, per browser: {"<thread id>@<created>": codie reply count}.
+// Which replies the reader has seen, per browser: {"<thread id>@<created>": zimone reply count}.
 // Keyed with the creation time because thread ids restart when a book's server state is reset.
-const SEEN_KEY = 'codie.seenReplies';
+const SEEN_KEY = 'zimone.seenReplies';
 const threadKey = (t) => `${t.id}@${t.created}`;
-const replyCount = (t) => t.messages.filter((m) => m.role === 'codie').length;
+const replyCount = (t) => t.messages.filter((m) => m.role === 'zimone').length;
 const seen = (() => {
   try {
     return JSON.parse(localStorage.getItem(SEEN_KEY) ?? '{}');
@@ -384,7 +384,7 @@ function threadCard(t) {
   const convo = t.kind === 'conversation';
   // A conversation previews its latest message; a passage thread previews the question that started it.
   const rawPreview = convo ? (t.messages[t.messages.length - 1]?.text ?? '') : (t.messages.find((m) => m.role === 'reader')?.text ?? '');
-  // codie's messages are Markdown; show links and emphasis as plain text in the one-line preview.
+  // zimone's messages are Markdown; show links and emphasis as plain text in the one-line preview.
   const preview = rawPreview.replace(/\[([^\]]+)\]\([^)]*\)/g, '$1').replace(/[*_`#>]/g, '');
   const label = convo ? (t.chapter ? 'Conversation about this chapter' : 'Conversation about the book') : (t.quote ?? 'About the whole chapter');
   const head = el(
@@ -458,8 +458,8 @@ function renderThreads() {
   els.threads.replaceChildren(...[...convo, ...asks].map(threadCard));
   els.empty.hidden = convo.length + asks.length > 0;
   els.empty.textContent = state.chapterId
-    ? 'Message codie below, or select a passage to ask about it.'
-    : 'Message codie below about the book: what to cover next, how it’s going, anything.';
+    ? 'Message zimone below, or select a passage to ask about it.'
+    : 'Message zimone below about the book: what to cover next, how it’s going, anything.';
 }
 
 function replaceCard(t) {
@@ -482,7 +482,7 @@ function upsertThread(t) {
   if (visible) markSeen(t);
   replaceCard(t);
   if (prev && replyCount(t) > replyCount(prev) && !visible) {
-    toast(t.kind === 'conversation' ? 'New message from codie' : 'codie answered', {
+    toast(t.kind === 'conversation' ? 'New message from zimone' : 'zimone answered', {
       label: 'Show',
       run: () => {
         openSide();
@@ -586,7 +586,7 @@ async function loadChapter(id, { preserve = false } = {}) {
   els.banner.hidden = ch.errors.length === 0;
   if (ch.errors.length) {
     els.banner.replaceChildren(
-      document.createTextNode('This chapter has formatting errors (codie has been asked to keep chapters valid):'),
+      document.createTextNode('This chapter has formatting errors (zimone has been asked to keep chapters valid):'),
       el('ul', {}, ...ch.errors.map((e) => el('li', { text: `line ${e.line}: ${e.message}` }))),
     );
   }
@@ -610,7 +610,7 @@ async function loadChapter(id, { preserve = false } = {}) {
 
   renderPager(ch);
   els.finish.hidden = false;
-  els.finishNote.textContent = ch.finished ? 'You marked this chapter finished.' : 'Tells codie to prepare the next chapter based on how this one went.';
+  els.finishNote.textContent = ch.finished ? 'You marked this chapter finished.' : 'Tells zimone to prepare the next chapter based on how this one went.';
 
   if (anchor) {
     const n = blockEl(anchor.id);
@@ -646,7 +646,7 @@ async function loadToc() {
 // ---------------------------------------------------------------- compose
 
 const composePlaceholder = () =>
-  state.pendingAnchor ? 'Ask about this passage…' : state.chapterId ? 'Message codie about this chapter…' : 'Message codie about this book…';
+  state.pendingAnchor ? 'Ask about this passage…' : state.chapterId ? 'Message zimone about this chapter…' : 'Message zimone about this book…';
 
 // Attaches a passage to the message box (or detaches it with null).
 function attachPassage(anchor) {
@@ -742,7 +742,7 @@ els.finishBtn.addEventListener('click', async () => {
   els.finishBtn.disabled = true;
   try {
     const { thread } = await api('/api/finished', { chapter: state.chapterId });
-    els.finishNote.textContent = 'Marked finished. codie will prepare what comes next.';
+    els.finishNote.textContent = 'Marked finished. zimone will prepare what comes next.';
     if (thread) {
       upsertThread(thread);
       openSide();
@@ -774,7 +774,7 @@ function connectStream() {
     const msg = JSON.parse(ev.data);
     if (msg.type === 'thread' && msg.thread.chapter === state.chapterId) upsertThread(msg.thread);
     else if (msg.type === 'chapter' && msg.id === state.chapterId) {
-      loadChapter(state.chapterId, { preserve: true }).then(() => toast('codie updated this chapter'), reportError);
+      loadChapter(state.chapterId, { preserve: true }).then(() => toast('zimone updated this chapter'), reportError);
     } else if (msg.type === 'book' || msg.type === 'chapter') resync();
   };
 }

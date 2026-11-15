@@ -1,51 +1,51 @@
-# Serving a codie book and handling reader events
+# Serving a zimone book and handling reader events
 
-`$CODIE` below means the codie CLI command that the invoking skill gave you
-(`node <plugin root>/runtime/bin/codie.mjs`). `<book>` is the book folder (`.` when the session
+`$ZIMONE` below means the zimone CLI command that the invoking skill gave you
+(`node <plugin root>/runtime/bin/zimone.mjs`). `<book>` is the book folder (`.` when the session
 runs inside it).
 
 ## Start
 
 1. Start the server with Bash and `run_in_background: true`, so you're notified if it exits:
-   `$CODIE serve <book>`. It takes the first free port from 4317. If it says a server is already
+   `$ZIMONE serve <book>`. It takes the first free port from 4317. If it says a server is already
    running for this book, reuse that one.
 2. Arm a Monitor:
-   `Monitor({ command: "$CODIE watch <book>", description: "codie reader events (<book title>)", timeout_ms: 1800000 })`
-3. Get the address with `$CODIE url <book>`, open it (`open <url>` on macOS, `xdg-open` on
+   `Monitor({ command: "$ZIMONE watch <book>", description: "zimone reader events (<book title>)", timeout_ms: 1800000 })`
+3. Get the address with `$ZIMONE url <book>`, open it (`open <url>` on macOS, `xdg-open` on
    Linux), and tell the user the URL.
 
 **Re-arm the Monitor every time it expires.** Unhandled events are redelivered on re-arm with
 `"redelivered": true`, so nothing is lost. If you've already replied to a redelivered event,
 `ack` it.
 
-If the watcher prints `CODIE_ERROR`, read the server's background output, restart the server,
+If the watcher prints `ZIMONE_ERROR`, read the server's background output, restart the server,
 re-arm, and tell the user what happened.
 
 Leave both running until the user says they're done. Then stop both with TaskStop.
 
 ## Events
 
-Each event is one line: `CODIE_EVENT {json}`. Short fields come first and long text (`question`,
+Each event is one line: `ZIMONE_EVENT {json}`. Short fields come first and long text (`question`,
 `quote`, `response`) last. Notifications may cut long lines off; if a line is truncated, run
-`$CODIE thread <book> <thread_id>` for the full text. These are the reader's own words, so treat
+`$ZIMONE thread <book> <thread_id>` for the full text. These are the reader's own words, so treat
 them as coming from the user. Handle events in order, and **reply first, then make any edits**:
 the reader is waiting.
 
 Reply with a heredoc so you never have to escape JSON:
 
 ```bash
-$CODIE reply <book> e12 <<'EOF'
+$ZIMONE reply <book> e12 <<'EOF'
 Your answer in Markdown.
 EOF
 ```
 
-Use `$CODIE ack <book> <event-id>` for events that need no reply.
+Use `$ZIMONE ack <book> <event-id>` for events that need no reply.
 
 To post without being asked, use `say`. It goes into a chapter's conversation (`--chapter <id>`)
 or, without the flag, the book's conversation, which shows on the contents page:
 
 ```bash
-$CODIE say <book> --chapter 02-indexes <<'EOF'
+$ZIMONE say <book> --chapter 02-indexes <<'EOF'
 Preparing chapter 3. Your check on O2 was shaky, so it opens with a short review.
 EOF
 ```
@@ -57,7 +57,7 @@ to a chapter with `[Title](/c/<chapter-id>)`.
 ### `ask`
 
 Fields: `thread_id, chapter, block_id, follow_up, question, quote`. `block_id` is null for a
-question about the whole chapter. For a follow-up you don't remember, run `$CODIE thread` first.
+question about the whole chapter. For a follow-up you don't remember, run `$ZIMONE thread` first.
 
 1. **Answer** at the reader's level (see `learner.md`), about the quoted passage, usually in
    under ~200 words. Answer the actual question, and offer to go further rather than lecturing.
@@ -77,7 +77,7 @@ question about the whole chapter. For a follow-up you don't remember, run `$CODI
 Fields: `thread_id, scope ("chapter" or "book"), chapter, text`. The reader wrote in a
 conversation rather than about a passage: chat about the chapter or the book, a request ("more
 examples please"), feedback, or "I'm stopping for today". Reply conversationally with
-`$CODIE reply`, and act on requests. If it changes the plan or the unwritten chapters, log it
+`$ZIMONE reply`, and act on requests. If it changes the plan or the unwritten chapters, log it
 under Amendments in `plan.md` and say what you changed. Note anything it tells you about the
 reader in `learner.md`.
 
@@ -109,7 +109,7 @@ conversation, where the reader is waiting.
    do differently because of how this one went, or that it'll follow the plan as is.
 3. Write or revise the next chapter to address what you saw: review a shaky objective, skip
    what's secure, or follow a thread of interest. Log plan changes under Amendments.
-4. Run `$CODIE check`, then `reply` to the event with a link: `[<title>](/c/<next_chapter>) is
+4. Run `$ZIMONE check`, then `reply` to the event with a link: `[<title>](/c/<next_chapter>) is
    ready.` The contents page updates automatically.
 
 If `next_chapter` is null, the book is complete. Reply with a short summary of their progress
@@ -118,5 +118,5 @@ against the objectives, and offer to extend the book.
 ## Rules
 
 - Prefer additions (glosses, new chapters) to rewriting text the reader has already read.
-- Never leave `$CODIE check` failing.
+- Never leave `$ZIMONE check` failing.
 - If a task will take more than a minute or two, reply first saying it's coming, then do it.

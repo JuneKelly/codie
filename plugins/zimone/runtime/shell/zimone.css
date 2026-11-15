@@ -180,18 +180,18 @@ body.cx-side-closed .cx-side { display: none; }
 .cx-thread-body { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; padding: 0 12px 12px; }
 /* Long unbroken text (URLs, code) wraps instead of widening the sidebar. */
 .cx-msg { font-size: 14.5px; min-width: 0; overflow-wrap: anywhere; }
-.cx-msg-codie pre { max-width: 100%; overflow-x: auto; background: var(--surface-2); padding: 8px 10px; border-radius: 6px; font-size: 13px; overflow-wrap: normal; }
-.cx-msg-codie code { font-size: 0.9em; background: var(--surface-2); padding: 0.1em 0.3em; border-radius: 3px; }
-.cx-msg-codie pre code { background: none; padding: 0; }
-.cx-msg-codie .cx-table-wrap { margin: 0.5em 0; }
-.cx-msg-codie .cx-table-wrap td, .cx-msg-codie .cx-table-wrap th { overflow-wrap: normal; }
+.cx-msg-zimone pre { max-width: 100%; overflow-x: auto; background: var(--surface-2); padding: 8px 10px; border-radius: 6px; font-size: 13px; overflow-wrap: normal; }
+.cx-msg-zimone code { font-size: 0.9em; background: var(--surface-2); padding: 0.1em 0.3em; border-radius: 3px; }
+.cx-msg-zimone pre code { background: none; padding: 0; }
+.cx-msg-zimone .cx-table-wrap { margin: 0.5em 0; }
+.cx-msg-zimone .cx-table-wrap td, .cx-msg-zimone .cx-table-wrap th { overflow-wrap: normal; }
 .cx-msg-reader { background: var(--surface-2); padding: 8px 10px; border-radius: 6px; white-space: pre-wrap; }
 .cx-msg-system { font-size: 13px; color: var(--muted); font-style: italic; text-align: center; }
 .cx-thread-convo { border-color: var(--accent); }
-.cx-msg-codie p { margin: 0 0 0.6em; }
-.cx-msg-codie p:last-child { margin-bottom: 0; }
-.cx-msg-codie blockquote { margin: 0.5em 0; padding-left: 10px; border-left: 2px solid var(--rule); color: var(--muted); }
-.cx-msg-codie ul, .cx-msg-codie ol { padding-left: 1.3em; margin: 0.4em 0; }
+.cx-msg-zimone p { margin: 0 0 0.6em; }
+.cx-msg-zimone p:last-child { margin-bottom: 0; }
+.cx-msg-zimone blockquote { margin: 0.5em 0; padding-left: 10px; border-left: 2px solid var(--rule); color: var(--muted); }
+.cx-msg-zimone ul, .cx-msg-zimone ol { padding-left: 1.3em; margin: 0.4em 0; }
 .cx-msg-label { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); margin-bottom: 2px; }
 .cx-status { font-size: 13px; color: var(--muted); display: flex; align-items: center; gap: 8px; }
 .cx-status::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; animation: cx-pulse 1.2s ease-in-out infinite; }

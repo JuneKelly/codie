@@ -18,7 +18,7 @@ class HttpError extends Error {
 }
 
 export function serverInfoFile(dir) {
-  return path.join(dir, '.codie', 'server.json');
+  return path.join(dir, '.zimone', 'server.json');
 }
 
 function pidAlive(pid) {
@@ -73,7 +73,7 @@ class Store {
     return {
       ...t,
       status: this.threadStatus(t),
-      messages: t.messages.map((m) => (m.role === 'codie' ? { ...m, html: renderMarkdown(m.text) } : m)),
+      messages: t.messages.map((m) => (m.role === 'zimone' ? { ...m, html: renderMarkdown(m.text) } : m)),
     };
   }
 }
@@ -117,16 +117,16 @@ export const DEFAULT_PORTS = [4317, 4336]; // inclusive range tried when no --po
 
 // Serves a book. port: a number to bind exactly, or null to take the first free port in DEFAULT_PORTS.
 export async function serve(dir, { port }) {
-  const codieDir = path.join(dir, '.codie');
-  fs.mkdirSync(codieDir, { recursive: true });
+  const zimoneDir = path.join(dir, '.zimone');
+  fs.mkdirSync(zimoneDir, { recursive: true });
   const infoFile = serverInfoFile(dir);
   if (fs.existsSync(infoFile)) {
     const prev = JSON.parse(fs.readFileSync(infoFile, 'utf8'));
-    if (pidAlive(prev.pid)) throw new Error(`a codie server is already running for this book (pid ${prev.pid}, port ${prev.port})`);
+    if (pidAlive(prev.pid)) throw new Error(`a zimone server is already running for this book (pid ${prev.pid}, port ${prev.port})`);
     console.error(`removing stale ${infoFile} (pid ${prev.pid} is gone)`);
   }
   loadBook(dir); // fail fast on an invalid book.json
-  const store = new Store(path.join(codieDir, 'state.json'));
+  const store = new Store(path.join(zimoneDir, 'state.json'));
   // Identifies this server run; event ids can repeat if state.json is reset, so watchers key on it.
   const instance = crypto.randomUUID();
   const clients = new Set();
@@ -289,11 +289,11 @@ export async function serve(dir, { port }) {
       const pending = store.data.events.some((e) => e.type === 'chapter_finished' && !e.handled_at && e.payload.chapter === chapter);
       let thread = null;
       if (!pending) {
-        // The finish shows in the chapter's conversation, and codie answers there when the next chapter is ready.
+        // The finish shows in the chapter's conversation, and zimone answers there when the next chapter is ready.
         thread = conversationFor(chapter);
         thread.messages.push({
           role: 'system',
-          text: next ? 'You marked this chapter finished. codie will prepare the next one.' : 'You marked the last chapter finished.',
+          text: next ? 'You marked this chapter finished. zimone will prepare the next one.' : 'You marked the last chapter finished.',
           at: new Date().toISOString(),
         });
         const e = newEvent('chapter_finished', thread.id, null);
@@ -329,7 +329,7 @@ export async function serve(dir, { port }) {
       if (!e.thread_id) throw new HttpError(400, `event ${e.id} (${e.type}) has no thread to reply to; use ack`);
       const t = store.thread(e.thread_id);
       const at = new Date().toISOString();
-      t.messages.push({ role: 'codie', text, at, event_id: e.id });
+      t.messages.push({ role: 'zimone', text, at, event_id: e.id });
       e.handled_at = at;
       store.save();
       broadcastThread(t);
@@ -340,7 +340,7 @@ export async function serve(dir, { port }) {
       const text = str(body, 'text');
       const chapter = str(body, 'chapter', { optional: true });
       const thread = conversationFor(chapter);
-      thread.messages.push({ role: 'codie', text, at: new Date().toISOString() });
+      thread.messages.push({ role: 'zimone', text, at: new Date().toISOString() });
       store.save();
       broadcastThread(thread);
       return { ok: true, thread_id: thread.id };
@@ -377,8 +377,8 @@ export async function serve(dir, { port }) {
       const p = url.pathname;
 
       if (req.method === 'GET' && (p === '/' || /^\/c\/[\w-]+\/?$/.test(p))) return sendFile(res, path.join(SHELL_DIR, 'index.html'), 'text/html; charset=utf-8');
-      if (req.method === 'GET' && p === '/shell/codie.js') return sendFile(res, path.join(SHELL_DIR, 'codie.js'), 'text/javascript; charset=utf-8');
-      if (req.method === 'GET' && p === '/shell/codie.css') return sendFile(res, path.join(SHELL_DIR, 'codie.css'), 'text/css; charset=utf-8');
+      if (req.method === 'GET' && p === '/shell/zimone.js') return sendFile(res, path.join(SHELL_DIR, 'zimone.js'), 'text/javascript; charset=utf-8');
+      if (req.method === 'GET' && p === '/shell/zimone.css') return sendFile(res, path.join(SHELL_DIR, 'zimone.css'), 'text/css; charset=utf-8');
       if (req.method === 'GET' && p === '/api/stream') {
         res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-store', Connection: 'keep-alive' });
         res.write(': connected\n\n');
@@ -416,7 +416,7 @@ export async function serve(dir, { port }) {
   const watcher = fs.watch(dir, { recursive: true }, (_ev, filename) => {
     if (!filename) return;
     const rel = filename.split(path.sep).join('/');
-    if (rel.startsWith('.codie/')) return;
+    if (rel.startsWith('.zimone/')) return;
     const m = rel.match(/^chapters\/([\w-]+)\.md$/);
     if (m) notify(`c:${m[1]}`, { type: 'chapter', id: m[1] });
     else if (rel === 'book.json') notify('book', { type: 'book' });
@@ -465,5 +465,5 @@ export async function serve(dir, { port }) {
   process.on('SIGINT', shutdown);
   process.on('SIGTERM', shutdown);
 
-  console.log(`codie serving ${path.relative(process.cwd(), dir) || "."} at http://127.0.0.1:${port}/`);
+  console.log(`zimone serving ${path.relative(process.cwd(), dir) || "."} at http://127.0.0.1:${port}/`);
 }

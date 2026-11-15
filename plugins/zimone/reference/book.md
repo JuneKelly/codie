@@ -1,7 +1,7 @@
-# codie book reference
+# zimone book reference
 
-`$CODIE` below means the codie CLI command that the invoking skill gave you
-(`node <plugin root>/runtime/bin/codie.mjs`).
+`$ZIMONE` below means the zimone CLI command that the invoking skill gave you
+(`node <plugin root>/runtime/bin/zimone.mjs`).
 
 ## Book folder
 
@@ -15,15 +15,15 @@ A book is a self-contained folder, and ideally the project a Claude Code session
   brief.md         (only if the book was commissioned from another session)
   context/         (optional) copied material the book draws on, e.g. a schema or code excerpt
   chapters/<id>.md chapter source
-  .gitignore       contains ".codie/"
-  .codie/          server state (threads, event queue): never edit by hand
+  .gitignore       contains ".zimone/"
+  .zimone/         server state (threads, event queue): never edit by hand
 ```
 
 ### book.json
 
 ```json
 {
-  "codie_format": 1,
+  "zimone_format": 1,
   "title": "Reading Hegel",
   "subtitle": "From Kant's problem to the Phenomenology",
   "chapters": [
@@ -32,7 +32,7 @@ A book is a self-contained folder, and ideally the project a Claude Code session
 }
 ```
 
-`codie_format` must be `1`. Chapter ids match `[A-Za-z0-9][\w-]*` and name the file
+`zimone_format` must be `1`. Chapter ids match `[A-Za-z0-9][\w-]*` and name the file
 `chapters/<id>.md`. List every chapter in the syllabus, including ones not written yet.
 
 ### plan.md
@@ -104,7 +104,7 @@ even inside code). Raw HTML is shown as text, and images appear only as links, s
 either. A blank line always starts a new block, so keep each list, table or quote free of blank
 lines.
 
-After writing or editing a chapter, run `$CODIE check <book> <chapter-id>` and fix every
+After writing or editing a chapter, run `$ZIMONE check <book> <chapter-id>` and fix every
 error. Never leave the checker failing.
 
 ### Keeping ids stable
