@@ -165,8 +165,13 @@ questions in `learner.md`, may add a gloss or a block to the chapter, may amend 
 
 A thread's status is derived from its events: `queued` (not yet claimed by the session),
 `delivered` (claimed, no reply yet) or `answered`. The page shows "Waiting for zimone…" and
-"zimone is thinking…" for the first two. The learner can therefore tell a busy tutor from one
-that isn't connected.
+"zimone is thinking…" for the first two.
+
+The page also shows whether any session is watching. `zimone watch` claims every second, so
+the server counts the tutor as present while claims keep arriving, and as away after five
+seconds without one. It sends the change over the event stream. While the tutor is away, the
+header reads "zimone away", and waiting threads say that nobody is watching and how to start a
+session. The learner can therefore tell a busy tutor from a missing one.
 
 Questions began as anchored threads only. Conversations were added so the learner could talk
 to zimone without first selecting text, and so that finishing a chapter shows up in the same
@@ -215,9 +220,10 @@ The server is a plain Node `http` server. Per book, it keeps:
 - `.zimone/state.json`: `{ version, seq, threads, events, finished }`, written atomically with a
   temporary file and rename. Thread and event ids share one counter (`t1`, `e2`, …).
 
-Live updates go to open pages over server-sent events at `/api/stream`. There are three message
-types: `thread` (a thread changed), `chapter` (a chapter file changed) and `book` (`book.json`
-or chapter completion changed). The server watches the book folder with `fs.watch`, debounces,
+Live updates go to open pages over server-sent events at `/api/stream`. There are four message
+types: `thread` (a thread changed), `chapter` (a chapter file changed), `book` (`book.json`
+or chapter completion changed) and `tutor` (a session started or stopped watching; also sent
+when a page connects). The server watches the book folder with `fs.watch`, debounces,
 and ignores its own `.zimone/` writes. When the current chapter changes, the page reloads it in
 place and keeps the reader's scroll position, using the first visible block, along with any
 half-written check answers. After a dropped connection, it reloads to catch up.
@@ -275,8 +281,8 @@ break: books made by codie are refused with a message saying which three things 
 
 - **One session per book.** The design assumes a single tutor; two sessions watching one book
   would race to claim events.
-- **The tutor must be running.** Without a live session, questions queue but go unanswered.
-  The page shows them as waiting, but doesn't say the session is missing.
+- **The tutor must be running.** Without a live session, questions queue until one starts.
+  The page says so, but can't start a session itself.
 - **Monitor re-arming** depends on the session noticing that the Monitor has expired.
 - **No images** in chapters: they render as links. Diagrams are limited to text, code blocks
   and tables.

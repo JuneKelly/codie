@@ -22,6 +22,8 @@ answers and finished chapters flow back to that session through a Monitor runnin
 | `plugins/zimone/runtime/vendor/markdown-it/` | Vendored parser; see its `SOURCE.md` |
 | `examples/demo/` | "How Git Actually Works", a sample book (two chapters written, two planned) |
 | `docs/screenshots/` | README images, taken from `examples/demo` |
+| `scripts/screenshots/` | `take.mjs` retakes the README images; `seed.mjs` is the reader activity they show |
+| `docs/DESIGN.md` | How zimone works and why |
 | `.claude/skills/version-bump/` | Project skill: when and how to bump the plugin version |
 
 ## Commands
@@ -80,5 +82,6 @@ direct instructions: say what to do and when, and keep them short. The README an
 - Before pushing changes under `plugins/zimone/`, follow the `version-bump` skill: installed users
   don't receive a change until `version` in `plugin.json` is bumped. Bump in its own commit,
   `Bump zimone to X.Y.Z`.
-- If a UI change makes the README screenshots out of date, retake them from a scratch copy of
-  `examples/demo` at 1280×800, 2× scale.
+- If a UI change makes the README screenshots out of date, retake them with
+  `node scripts/screenshots/take.mjs` (needs Google Chrome; it works on a scratch copy and its own
+  port).

@@ -33,6 +33,8 @@ const state = {
   openThread: null, // id of the one expanded thread in the sidebar, or null
   drafts: new Map(), // thread id -> unsent follow-up text (survives collapsing)
   wasDown: false,
+  streamLive: false,
+  tutorOnline: null, // whether a session is watching this book; null until the server says
 };
 
 // ---------------------------------------------------------------- utilities
@@ -86,9 +88,20 @@ function reportError(err) {
   toast(err.message);
 }
 
-function setConn(s) {
+const AWAY_HINT = 'No Claude session is watching this book. Run /zimone:open in its folder; messages wait until then.';
+
+// The header shows the page's link to the server and, when that's up, whether a session is watching.
+function renderConn() {
+  const s = !state.streamLive ? (state.wasDown ? 'down' : 'connecting') : state.tutorOnline === false ? 'away' : 'live';
   els.conn.dataset.state = s;
-  els.conn.textContent = { live: 'live', down: 'disconnected', connecting: 'connecting' }[s];
+  els.conn.textContent = { live: 'live', away: 'zimone away', down: 'disconnected', connecting: 'connecting' }[s];
+  els.conn.title = s === 'away' ? AWAY_HINT : 'Connection to the zimone server';
+}
+
+// Text for a thread still waiting on zimone: queued (not yet seen) or delivered (seen, no reply yet).
+function pendingText(status) {
+  if (state.tutorOnline === false) return `Waiting for zimone. ${AWAY_HINT}`;
+  return status === 'queued' ? 'Waiting for zimone…' : 'zimone is thinking…';
 }
 
 // Sidebar state. Wide screens default to open and remember the reader's choice; narrow screens
@@ -295,8 +308,7 @@ function selectionAnchor() {
 // ---------------------------------------------------------------- threads
 
 function statusLine(t) {
-  if (t.status === 'queued') return el('div', { class: 'cx-status', text: 'Waiting for zimone…' });
-  if (t.status === 'delivered') return el('div', { class: 'cx-status', text: 'zimone is thinking…' });
+  if (t.status === 'queued' || t.status === 'delivered') return el('div', { class: 'cx-status', 'data-status': t.status, text: pendingText(t.status) });
   return null;
 }
 
@@ -367,7 +379,7 @@ function openThread(id) {
 
 function chipText(t) {
   if (t.status === 'queued') return 'waiting';
-  if (t.status === 'delivered') return 'thinking…';
+  if (t.status === 'delivered') return state.tutorOnline === false ? 'waiting' : 'thinking…';
   if (t.kind === 'conversation') return t.messages.length === 1 ? '1 message' : `${t.messages.length} messages`;
   const n = replyCount(t);
   return n === 0 ? 'no reply' : n === 1 ? '1 reply' : `${n} replies`;
@@ -760,19 +772,25 @@ els.finishBtn.addEventListener('click', async () => {
 function connectStream() {
   const es = new EventSource('/api/stream');
   es.onopen = () => {
-    setConn('live');
+    state.streamLive = true;
+    renderConn();
     if (state.wasDown) {
       state.wasDown = false;
       resync();
     }
   };
   es.onerror = () => {
-    setConn('down');
+    state.streamLive = false;
     state.wasDown = true;
+    renderConn();
   };
   es.onmessage = (ev) => {
     const msg = JSON.parse(ev.data);
-    if (msg.type === 'thread' && msg.thread.chapter === state.chapterId) upsertThread(msg.thread);
+    if (msg.type === 'tutor') {
+      state.tutorOnline = msg.online;
+      renderConn();
+      for (const t of state.threads.values()) if (t.kind !== 'check' && (t.status === 'queued' || t.status === 'delivered')) replaceCard(t);
+    } else if (msg.type === 'thread' && msg.thread.chapter === state.chapterId) upsertThread(msg.thread);
     else if (msg.type === 'chapter' && msg.id === state.chapterId) {
       loadChapter(state.chapterId, { preserve: true }).then(() => toast('zimone updated this chapter'), reportError);
     } else if (msg.type === 'book' || msg.type === 'chapter') resync();

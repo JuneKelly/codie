@@ -57,6 +57,8 @@ button, textarea, input { font: inherit; color: inherit; }
 .cx-conn::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--muted); }
 .cx-conn[data-state="live"]::before { background: var(--ok); }
 .cx-conn[data-state="down"]::before { background: var(--bad); }
+.cx-conn[data-state="away"] { color: var(--warn); cursor: help; }
+.cx-conn[data-state="away"]::before { background: var(--warn); }
 #cx-toggle-side[aria-expanded="true"] { background: var(--accent-soft); }
 
 /* Layout */

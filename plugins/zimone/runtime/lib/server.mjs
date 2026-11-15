@@ -138,6 +138,17 @@ export async function serve(dir, { port }) {
   };
   const broadcastThread = (t) => broadcast({ type: 'thread', thread: store.publicThread(t) });
 
+  // Whether a session is watching: `zimone watch` claims every second, so a gap means it stopped.
+  const TUTOR_TIMEOUT_MS = 5000;
+  let lastClaim = 0;
+  let tutorOnline = false;
+  const tutorMessage = () => ({ type: 'tutor', online: tutorOnline });
+  const setTutorOnline = (online) => {
+    if (online === tutorOnline) return;
+    tutorOnline = online;
+    broadcast(tutorMessage());
+  };
+
   const chapterOrThrow = (id) => {
     try {
       return readChapter(dir, id);
@@ -307,6 +318,8 @@ export async function serve(dir, { port }) {
 
     // Agent side ------------------------------------------------------------
     'POST /api/events/claim': () => {
+      lastClaim = Date.now();
+      setTutorOnline(true);
       const now = new Date().toISOString();
       const out = [];
       const touched = new Set();
@@ -382,6 +395,7 @@ export async function serve(dir, { port }) {
       if (req.method === 'GET' && p === '/api/stream') {
         res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-store', Connection: 'keep-alive' });
         res.write(': connected\n\n');
+        res.write(`data: ${JSON.stringify(tutorMessage())}\n\n`);
         clients.add(res);
         req.on('close', () => clients.delete(res));
         return;
@@ -425,6 +439,9 @@ export async function serve(dir, { port }) {
   const keepalive = setInterval(() => {
     for (const res of clients) res.write(': ping\n\n');
   }, 25000);
+  const tutorCheck = setInterval(() => {
+    if (tutorOnline && Date.now() - lastClaim > TUTOR_TIMEOUT_MS) setTutorOnline(false);
+  }, 1000);
 
   const listen = (p) =>
     new Promise((resolve, reject) => {
@@ -458,6 +475,7 @@ export async function serve(dir, { port }) {
   const shutdown = () => {
     if (fs.existsSync(infoFile) && JSON.parse(fs.readFileSync(infoFile, 'utf8')).pid === process.pid) fs.unlinkSync(infoFile);
     clearInterval(keepalive);
+    clearInterval(tutorCheck);
     watcher.close();
     for (const res of clients) res.end();
     server.close(() => process.exit(0));
