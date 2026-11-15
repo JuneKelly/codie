@@ -113,6 +113,9 @@ function readBody(req) {
   });
 }
 
+export const DEFAULT_PORTS = [4317, 4336]; // inclusive range tried when no --port is given
+
+// Serves a book. port: a number to bind exactly, or null to take the first free port in DEFAULT_PORTS.
 export async function serve(dir, { port }) {
   const codieDir = path.join(dir, '.codie');
   fs.mkdirSync(codieDir, { recursive: true });
@@ -127,7 +130,7 @@ export async function serve(dir, { port }) {
   // Identifies this server run; event ids can repeat if state.json is reset, so watchers key on it.
   const instance = crypto.randomUUID();
   const clients = new Set();
-  const allowedHosts = new Set([`127.0.0.1:${port}`, `localhost:${port}`]);
+  let allowedHosts = new Set(); // set once the port is bound
 
   const broadcast = (msg) => {
     const line = `data: ${JSON.stringify(msg)}\n\n`;
@@ -374,13 +377,33 @@ export async function serve(dir, { port }) {
     for (const res of clients) res.write(': ping\n\n');
   }, 25000);
 
-  await new Promise((resolve, reject) => {
-    server.once('error', (err) => {
-      if (err.code === 'EADDRINUSE') reject(new Error(`port ${port} is already in use; pass --port <n> to pick another`));
-      else reject(err);
+  const listen = (p) =>
+    new Promise((resolve, reject) => {
+      const onError = (err) => reject(err);
+      server.once('error', onError);
+      server.listen(p, '127.0.0.1', () => {
+        server.off('error', onError);
+        resolve();
+      });
     });
-    server.listen(port, '127.0.0.1', resolve);
-  });
+  const candidates = [];
+  if (port !== null) candidates.push(port);
+  else for (let p = DEFAULT_PORTS[0]; p <= DEFAULT_PORTS[1]; p++) candidates.push(p);
+  let bound = null;
+  for (const p of candidates) {
+    try {
+      await listen(p);
+      bound = p;
+      break;
+    } catch (err) {
+      if (err.code !== 'EADDRINUSE') throw err;
+    }
+  }
+  if (bound === null) {
+    throw new Error(port !== null ? `port ${port} is already in use; pass --port <n> to pick another` : `no free port in ${DEFAULT_PORTS[0]}–${DEFAULT_PORTS[1]}; pass --port <n>`);
+  }
+  port = bound;
+  allowedHosts = new Set([`127.0.0.1:${port}`, `localhost:${port}`]);
 
   fs.writeFileSync(infoFile, JSON.stringify({ port, pid: process.pid, started: new Date().toISOString() }, null, 2));
   const shutdown = () => {

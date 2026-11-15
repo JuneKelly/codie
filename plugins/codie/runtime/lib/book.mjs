@@ -3,6 +3,7 @@ import path from 'node:path';
 import { renderChapter } from './render.mjs';
 
 const ID_RE = /^[A-Za-z0-9][\w-]*$/;
+export const BOOK_FORMAT = 1;
 
 export class BookError extends Error {}
 
@@ -22,6 +23,8 @@ export function loadBook(dir) {
   } catch (err) {
     throw new BookError(`cannot read ${file}: ${err.message}`, { cause: err });
   }
+  if (data.codie_format === undefined) throw new BookError(`${file}: missing "codie_format" (expected ${BOOK_FORMAT}); is this a codie book?`);
+  if (data.codie_format !== BOOK_FORMAT) throw new BookError(`${file}: codie_format ${JSON.stringify(data.codie_format)} is not supported (this codie reads format ${BOOK_FORMAT})`);
   if (typeof data.title !== 'string' || !data.title.trim()) throw new BookError(`${file}: "title" must be a non-empty string`);
   if (!Array.isArray(data.chapters) || data.chapters.length === 0) throw new BookError(`${file}: "chapters" must be a non-empty array`);
   const ids = new Set();
@@ -58,4 +61,15 @@ export function readChapter(dir, id) {
     prev: neighbour(book.chapters[idx - 1]),
     next: neighbour(book.chapters[idx + 1]),
   };
+}
+
+// Classifies a folder for /codie:new: 'book' (has book.json), 'brief' (has brief.md),
+// 'empty' (nothing but dotfiles), 'other', or 'missing'.
+export function detectFolder(dir) {
+  const abs = path.resolve(dir);
+  if (!fs.existsSync(abs)) return 'missing';
+  if (!fs.statSync(abs).isDirectory()) throw new BookError(`${abs} is not a directory`);
+  if (fs.existsSync(path.join(abs, 'book.json'))) return 'book';
+  if (fs.existsSync(path.join(abs, 'brief.md'))) return 'brief';
+  return fs.readdirSync(abs).some((n) => !n.startsWith('.')) ? 'other' : 'empty';
 }

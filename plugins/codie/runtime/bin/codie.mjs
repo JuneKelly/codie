@@ -2,12 +2,15 @@
 // codie CLI: serve a book, stream reader events to the agent, and reply to them.
 import fs from 'node:fs';
 import path from 'node:path';
-import { BookError, chapterExists, chapterFile, loadBook, resolveBookDir } from '../lib/book.mjs';
+import { BookError, chapterExists, chapterFile, detectFolder, loadBook, resolveBookDir } from '../lib/book.mjs';
 import { renderChapter } from '../lib/render.mjs';
-import { serve, serverInfoFile } from '../lib/server.mjs';
+import { DEFAULT_PORTS, serve, serverInfoFile } from '../lib/server.mjs';
 
 const USAGE = `usage:
-  codie serve  <book> [--port 4317]   serve the book (run in the background)
+  codie detect [folder]               classify a folder: book | brief | empty | other | missing
+  codie serve  <book> [--port <n>]    serve the book (run in the background); default: first free
+                                      port in ${DEFAULT_PORTS[0]}–${DEFAULT_PORTS[1]}
+  codie url    <book>                 wait for the book's server and print its URL
   codie watch  <book>                 print one CODIE_EVENT line per reader event (for Monitor)
   codie reply  <book> <event-id>      reply to an ask/check event; reply Markdown on stdin
   codie ack    <book> <event-id>      mark an event handled without replying
@@ -109,13 +112,27 @@ async function main() {
     console.log(USAGE);
     return;
   }
+  if (cmd === 'detect') {
+    const target = path.resolve(bookArg ?? '.');
+    console.log(`${detectFolder(target)} ${target}`);
+    return;
+  }
   const dir = resolveBookDir(bookArg);
   switch (cmd) {
     case 'serve': {
       const i = rest.indexOf('--port');
-      const port = i === -1 ? 4317 : Number(rest[i + 1]);
-      if (!Number.isInteger(port) || port <= 0 || port > 65535) fail(`invalid --port ${rest[i + 1]}`);
+      const port = i === -1 ? null : Number(rest[i + 1]);
+      if (port !== null && (!Number.isInteger(port) || port <= 0 || port > 65535)) fail(`invalid --port ${rest[i + 1]}`);
       await serve(dir, { port });
+      return;
+    }
+    case 'url': {
+      const file = serverInfoFile(dir);
+      for (let waited = 0; !fs.existsSync(file); waited += 200) {
+        if (waited >= 10000) fail(`no codie server came up for ${dir} within 10s (${file} is missing)`);
+        await sleep(200);
+      }
+      console.log(`${serverBase(dir)}/`);
       return;
     }
     case 'watch':
