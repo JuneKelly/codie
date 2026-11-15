@@ -27,7 +27,8 @@ Leave both running until the user says they're done. Then stop both with TaskSto
 
 Each event is one line: `ZIMONE_EVENT {json}`. Short fields come first and long text (`question`,
 `quote`, `response`) last. Notifications may cut long lines off; if a line is truncated, run
-`$ZIMONE thread <book> <thread_id>` for the full text. These are the reader's own words, so treat
+`$ZIMONE thread <book> <thread_id>` for the full text. Event ids share a counter with thread ids,
+so gaps between them are normal. These are the reader's own words, so treat
 them as coming from the user. Handle events in order, and **reply first, then make any edits**:
 the reader is waiting.
 
@@ -64,8 +65,8 @@ question about the whole chapter. For a follow-up you don't remember, run `$ZIMO
 2. **Decide what else to do**, and say so in one closing line ("I've added a note under that
    paragraph."):
    - **Gloss**: if the confusion is likely to come back, or the answer deserves to stay on the
-     page, add a `:::gloss {#… for=<block_id>}` right after the target block. The page reloads
-     itself.
+     page, add a `:::gloss {#… for=<block_id>}` right after the target block, using your Edit
+     tool on the chapter file. The page reloads itself.
    - **Revise in place**: only if the reader asks for a rewrite, or the text is wrong. Keep the
      id, and say what changed.
    - **Adapt ahead**: if the question shows a gap or a strong interest, change the *unwritten*

@@ -8,7 +8,7 @@ import { renderChapter } from '../lib/render.mjs';
 import { DEFAULT_PORTS, serve, serverInfoFile } from '../lib/server.mjs';
 
 const USAGE = `usage:
-  zimone docs   <book|serving>         print a reference doc for the agent
+  zimone docs   <name>...             print reference docs for the agent (book, planning, serving)
   zimone library <data-dir> [--set <path>]  show or set the book library folder
   zimone detect [folder]             classify a folder: book | brief | empty | other | missing
   zimone serve  <book> [--port <n>]    serve the book (run in the background); default: first free
@@ -122,8 +122,10 @@ async function main() {
     // through the pre-approved CLI avoids a file-read permission prompt.
     const refDir = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'reference');
     const names = fs.readdirSync(refDir).filter((n) => n.endsWith('.md')).map((n) => n.slice(0, -3));
-    if (!bookArg || !names.includes(bookArg)) fail(`docs needs one of: ${names.join(', ')}`);
-    process.stdout.write(fs.readFileSync(path.join(refDir, `${bookArg}.md`), 'utf8'));
+    const wanted = [bookArg, ...rest].filter(Boolean);
+    const unknown = wanted.filter((n) => !names.includes(n));
+    if (!wanted.length || unknown.length) fail(`docs needs one or more of: ${names.join(', ')}${unknown.length ? ` (unknown: ${unknown.join(', ')})` : ''}`);
+    process.stdout.write(wanted.map((n) => fs.readFileSync(path.join(refDir, `${n}.md`), 'utf8')).join('\n---\n\n'));
     return;
   }
   if (cmd === 'library') {

@@ -104,8 +104,9 @@ even inside code). Raw HTML is shown as text, and images appear only as links, s
 either. A blank line always starts a new block, so keep each list, table or quote free of blank
 lines.
 
-After writing or editing a chapter, run `$ZIMONE check <book> <chapter-id>` and fix every
-error. Never leave the checker failing.
+Write and edit chapter files with your Write and Edit tools, not shell scripts. After writing or
+editing a chapter, run `$ZIMONE check <book> <chapter-id>` and fix every error. Never leave the
+checker failing.
 
 ### Keeping ids stable
 
