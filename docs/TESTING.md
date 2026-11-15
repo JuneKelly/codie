@@ -91,7 +91,9 @@ unhandled, and are redelivered with `"redelivered": true`, until they get a `rep
 ## In the browser
 
 Use the built-in browser pane on the URL from `zimone url`. `javascript_tool` is the quickest way
-to drive the page and read its state, for example:
+to drive the page and read its state. It gives up after 45 seconds, so to wait for an agent's
+reply (writing a unit takes a minute or more), poll in several calls of under 40 seconds each
+rather than one long loop. For example:
 
 ```js
 // Ask about a passage the way a user would: select text, click "Ask about this", submit.
@@ -124,20 +126,24 @@ gives byte-identical images, or near enough, so a large diff means the UI change
 ## A live tutoring test
 
 The strongest check, and the only one that tests the skills and reference docs, is a real
-session tutoring a scratch workbook while you play the user. It found four real problems on its
-first run.
+session tutoring a scratch workbook while you play the user. Each of the first two runs found
+four or five real problems.
 
-1. Copy `examples/demo` to a scratch folder and add a `.gitignore` containing `.zimone/`.
+1. Copy `examples/demo` to a scratch folder and add a `.gitignore` containing `.zimone/`. Set
+   `terms` in its `workbook.json` (say `"unit": ["chapter", "chapters"]`), so the same run checks
+   that the page and the agent use the workbook's words.
 2. Make sure the installed plugin reads from this checkout (`claude plugin list` shows
    `Read from: …/plugins/zimone`). If the repo folder moved, remove and re-add the marketplace
    (`claude plugin marketplace add ./`) and reinstall.
 3. Start a separate session in the scratch folder (in the desktop app, `start_session` with
    `cwd`) whose prompt is `/zimone:open` plus "tutor the user on the page; keep serving until
    told to stop".
-4. When it reports the workbook is served, confirm the port with `zimone url <scratch workbook>`, then
-   act as the user in the browser: ask about a passage, answer a check, send a unit message,
-   and finish a unit.
+4. When it reports the workbook is served, confirm the port with `zimone url <scratch workbook>`,
+   then act as the user in the browser: ask about a passage, answer a check, send a unit message,
+   and mark a unit done.
 5. Check the results: `zi check` passes for the new unit, `.zimone/state.json` has no
    unhandled events, and `learner.md` and `plan.md` record what happened.
 6. Ask the session to stop its server and Monitor, and to list anything in the skill, the
-   references or the CLI that was unclear or needed a workaround. Fix what it reports.
+   references or the CLI that was unclear or needed a workaround. Always ask: this report is
+   where the problems show up. Read the full report with the session tools (the note you get
+   when its turn ends is cut short), and fix what it reports.

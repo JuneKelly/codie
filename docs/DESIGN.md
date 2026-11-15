@@ -293,9 +293,13 @@ The page is plain HTML, CSS and JavaScript with no build step.
 
 The repository is its own Claude Code marketplace (`zimone-marketplace`) with one plugin in
 `plugins/zimone/`. Skills reference runtime files through `${CLAUDE_PLUGIN_ROOT}` and settings
-through `${CLAUDE_PLUGIN_DATA}`. Plugin files are usually outside the teaching session's folder,
-where reading them would prompt for permission, so the skills pre-approve the CLI alone. Every
-reference doc and setting is reached through the CLI.
+through `${CLAUDE_PLUGIN_DATA}`. The only setting so far is the library folder, stored by
+`zimone library` in `config.json` there, which is
+`~/.claude/plugins/data/zimone-zimone-marketplace/` (Claude Code names it
+`<plugin>-<marketplace>`). Uninstalling the plugin removes that folder, and renaming the plugin
+or marketplace moves it, so the setting doesn't survive either. Plugin files are usually outside
+the teaching session's folder, where reading them would prompt for permission, so the skills
+pre-approve the CLI alone. Every reference doc and setting is reached through the CLI.
 
 Installed users stay on a version until `version` in `plugin.json` changes. The repo's
 `version-bump` skill decides when and by how much. Anything that changes stored data needs more

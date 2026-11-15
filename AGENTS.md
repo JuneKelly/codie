@@ -75,6 +75,13 @@ tutoring test with a real session.
   Teaching ideas (checks, objectives, confidence) belong in the content and the reference docs;
   the one place the server knows a block type is `RESPONSE_FIELDS` in `render.mjs`. Words the
   user sees come from `terms` in `workbook.json`, never from the data. See [docs/API.md](docs/API.md).
+- **Renaming a CLI command, route, event or field is a cross-cutting change.** Each is described
+  in several places that nothing checks: the skills, the reference docs, `docs/API.md`,
+  `docs/TESTING.md`, the README and `scripts/screenshots/`. Grep for the old name across all of
+  them, then run a live tutoring test, since the skills and references are only tested by use.
+- **zimone's own setting** (the library folder) lives in
+  `~/.claude/plugins/data/zimone-zimone-marketplace/config.json`, written by `zimone library`.
+  It's lost if the plugin is uninstalled or renamed.
 - **Never suppress errors or default missing required data.** Missing or invalid workbook data is an
   error with a message that says what to fix.
 

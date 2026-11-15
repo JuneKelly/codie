@@ -1,10 +1,13 @@
-# 0001: First session, from idea to zimone 0.4.0
+# 0001: First session, from idea to zimone 0.5.0
 
 - **Date:** 2026-11-15, one long Claude Code session in the desktop app (Claude Opus 5.5), with one
   context compaction partway through.
 - **Outcome:** the idea was designed, built as a Claude Code plugin, used for a real book,
-  renamed from codie to zimone, documented, and tested end to end with a live tutoring session.
-  `main` ended at `8e119a2` (Bump zimone to 0.4.0).
+  renamed from codie to zimone, documented, tested end to end with live tutoring sessions, and
+  reworked from books and chapters into workbooks and units on a generic data model. Release
+  0.5.0 was pushed at `77aa636`.
+- **Words:** sections 1–8 use the words of their time ("book", "chapter", "reader"); section 9
+  explains the change.
 
 This is a summary, not a verbatim log. It records the decisions and the reasons for them, and
 the mistakes worth not repeating. For how the system works now, read [DESIGN.md](../DESIGN.md).
@@ -141,6 +144,39 @@ updated `learner.md` and `plan.md`. Asked for friction, it reported four snags, 
 
 Finally `docs/TESTING.md`, `docs/API.md`, `CHANGELOG.md` and this summary were written.
 
+## 9. Workbooks, units and a generic model
+
+The user felt "book" was too specific and asked for another term. Candidates included study,
+course, inquiry, primer and folio; the user chose **workbook**, because it covers both "course"
+and "notebook" without dictating the content. "Chapter" became **unit**, at least internally.
+
+The user then asked to use the rename to re-evaluate the internal vocabulary, so that the API and
+data model wouldn't bake in today's features. The review found the server knew what a check and a
+confidence rating were, and had three thread kinds and four event types that were really one
+thing: the user said something somewhere. The result, released as 0.5.0:
+
+- **Threads with an optional anchor** instead of kinds: none (the unit's or workbook's own
+  thread), a passage with a quote, or a whole block (where a check's answers go).
+- **Messages with optional `fields`**, validated per block type in one table, `RESPONSE_FIELDS`.
+- **Roles `user`, `agent`, `system`.** The user rejected "learner" as a role, to avoid baking in
+  even that concept; the product name had also been a role value.
+- **Two events**, `message` and `unit_state`. The user suggested a state enum over a `unit_done`
+  event to keep options open; `done` is the only state so far.
+- **Display terms in `workbook.json`**, so a workbook can show "chapter" (or anything else) on
+  the page while everything underneath says "unit". This was the user's idea: "unit" throughout,
+  with the surface configurable.
+
+The user confirmed there were no real users, so it was another clean break: no migration, and a
+state version bump to refuse old state. A second live tutoring test used a workbook whose terms
+said "book" and "chapter". The session used those words on the page and in its replies, answered
+within about 13 seconds, and wrote unit 3 to a diagram request. Its friction report led to
+fetching one reference doc per call (several at once got truncated), resolving a contradiction
+about when to say "it's coming", and documenting diagrams, `next_exists` and fence tags.
+
+Finally the user's library folder moved from `~/books` to `~/zimone-library`, and the library
+setting was written to the zimone plugin's data folder (the old setting had gone with the codie
+uninstall).
+
 ## Lessons for future sessions
 
 - **Check which server you're talking to.** Early on, a test assumed port 4317 and opened the
@@ -155,12 +191,21 @@ Finally `docs/TESTING.md`, `docs/API.md`, `CHANGELOG.md` and this summary were w
 - **Backgrounding `zimone watch` with `&` hangs the Bash tool**; run it under `timeout`.
 - **A renamed repo folder breaks a local marketplace install**; remove and re-add the
   marketplace from the new path.
-- **The plugin's own sessions are the best testers.** A live tutoring run found problems that no
-  amount of API-level testing would have.
+- **The plugin's own sessions are the best testers.** Both live tutoring runs found problems that
+  no amount of API-level testing would have. Always ask for a friction report.
+- **Long tool output gets cut short.** A test session fetching several reference docs at once
+  lost the middle of them; the skills now fetch one per call.
+- **The browser pane's `javascript_tool` gives up after 45 seconds**, so waiting on an agent's
+  reply has to be split across calls.
+- **Plugin settings vanish on uninstall.** `${CLAUDE_PLUGIN_DATA}` is per plugin and marketplace,
+  so renaming the plugin (codie to zimone) silently dropped the library setting.
+- **Name the vocabulary before the API sets it.** Thread kinds and events named after each
+  learning feature had to be unpicked; the generic model is in API.md and AGENTS.md now.
 
 ## Left open
 
 - Claude Code channels, once they leave preview, would remove the Monitor's re-arming.
 - A `zimone gloss` command was suggested by the test session but not built; the reference now
   says to use the Edit tool.
-- The reference docs still use Hegel in their format examples.
+- The user's `relational` book in `~/zimone-library` predates 0.5.0 and isn't recognised as a
+  workbook; it was test material and was left as is.
