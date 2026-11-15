@@ -1,7 +1,7 @@
 {
   "name": "zimone",
   "description": "Workbooks you can talk to: Claude interviews you, writes an adaptive course as a local workbook, and answers your questions about any passage as you work through it.",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "author": {
     "name": "June Kelly"
   },
