@@ -84,7 +84,7 @@ browser ──HTTP/SSE──▶ codie server ◀──claim── codie watch �
 |---|---|
 | `plugins/codie/skills/new`, `skills/open` | The two skills |
 | `plugins/codie/reference/` | Shared agent instructions: book format and authoring, serving and event handling |
-| `plugins/codie/runtime/bin/codie.mjs` | CLI: `detect`, `serve`, `url`, `watch`, `reply`, `ack`, `thread`, `check` |
+| `plugins/codie/runtime/bin/codie.mjs` | CLI: `docs`, `library`, `detect`, `serve`, `url`, `watch`, `reply`, `ack`, `thread`, `check`. The skills pre-approve it, and route reference docs and plugin settings through it, so they don't trigger file-permission prompts |
 | `plugins/codie/runtime/lib/` | Chapter renderer and validator, book loader, HTTP server |
 | `plugins/codie/runtime/shell/` | The reader page |
 | `.claude-plugin/marketplace.json` | Makes this repo its own one-plugin marketplace |
