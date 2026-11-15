@@ -1,7 +1,7 @@
 {
   "name": "codie",
   "description": "Books you can talk to: Claude interviews you, writes an adaptive course as a local book, and answers your questions about any passage while you read.",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "author": {
     "name": "June Kelly"
   }
