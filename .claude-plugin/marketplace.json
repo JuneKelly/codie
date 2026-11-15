@@ -1,0 +1,14 @@
+{
+  "name": "codie-marketplace",
+  "description": "The codie plugin: books you can talk to.",
+  "owner": {
+    "name": "June Kelly"
+  },
+  "plugins": [
+    {
+      "name": "codie",
+      "source": "./plugins/codie",
+      "description": "Books you can talk to: an interviewed, adaptive course you read in the browser and question passage by passage."
+    }
+  ]
+}

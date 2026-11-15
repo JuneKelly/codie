@@ -1,0 +1,8 @@
+{
+  "title": "A Taste of Hegel",
+  "subtitle": "A two-chapter demo book for trying out codie",
+  "chapters": [
+    { "id": "01-why-hegel-is-hard", "title": "Why Hegel Is Hard to Read" },
+    { "id": "02-dialectic", "title": "What \"Dialectic\" Does and Doesn't Mean" }
+  ]
+}

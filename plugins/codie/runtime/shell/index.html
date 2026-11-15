@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>codie</title>
+<link rel="stylesheet" href="/shell/codie.css">
+</head>
+<body>
+<header class="cx-top">
+  <a href="/" class="cx-book-title" id="cx-book-title">codie</a>
+  <span class="cx-conn" id="cx-conn" data-state="connecting" title="Connection to the codie server">connecting</span>
+  <button type="button" class="cx-btn cx-btn-quiet" id="cx-toggle-side" aria-controls="cx-side" aria-expanded="false">Questions</button>
+</header>
+
+<div class="cx-layout">
+  <main class="cx-main">
+    <div class="cx-banner" id="cx-banner" hidden></div>
+    <article class="cx-content" id="cx-content" aria-live="polite"></article>
+    <div class="cx-finish" id="cx-finish" hidden>
+      <button type="button" class="cx-btn" id="cx-finish-btn">I've finished this chapter</button>
+      <p class="cx-hint" id="cx-finish-note"></p>
+    </div>
+    <nav class="cx-pager" id="cx-pager"></nav>
+  </main>
+
+  <aside class="cx-side" id="cx-side" aria-label="Questions about this chapter">
+    <div class="cx-side-head">
+      <h2>Questions</h2>
+      <button type="button" class="cx-btn cx-btn-quiet" id="cx-ask-chapter">Ask about this chapter</button>
+    </div>
+    <form class="cx-compose" id="cx-compose" hidden>
+      <blockquote class="cx-quote" id="cx-compose-quote" hidden></blockquote>
+      <textarea id="cx-compose-text" rows="4" placeholder="What would you like to ask?" required></textarea>
+      <div class="cx-row">
+        <button type="submit" class="cx-btn">Ask</button>
+        <button type="button" class="cx-btn cx-btn-quiet" id="cx-compose-cancel">Cancel</button>
+        <span class="cx-hint">⌘↵ to send</span>
+      </div>
+    </form>
+    <div class="cx-threads" id="cx-threads"></div>
+    <p class="cx-empty" id="cx-threads-empty">Select any passage to ask about it.</p>
+  </aside>
+</div>
+
+<button type="button" class="cx-ask-sel" id="cx-ask-sel" hidden>Ask about this</button>
+<div class="cx-toast" id="cx-toast" role="status" hidden></div>
+<script type="module" src="/shell/codie.js"></script>
+</body>
+</html>
