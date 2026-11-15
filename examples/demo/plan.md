@@ -16,11 +16,11 @@ recovery becomes routine.
 ### 01-snapshots — Commits Are Snapshots
 Why: everything else is built on the object database; most confusion starts with "commits store diffs". Objectives: O1, O2.
 ### 02-branches — Branches Are Just Pointers
-Why: once commits are understood, branches and HEAD are small, and detached HEAD stops being scary. Objectives: O3. Prerequisites: chapter 1.
+Why: once commits are understood, branches and HEAD are small, and detached HEAD stops being scary. Objectives: O3. Prerequisites: unit 1.
 ### 03-merge-rebase — Merging and Rebasing, Drawn Out
-Why: both are ways of combining histories; drawing the graph shows what each rewrites. Teams disagree about which to prefer, so present both positions. Objectives: O4. Prerequisites: chapter 2.
+Why: both are ways of combining histories; drawing the graph shows what each rewrites. Teams disagree about which to prefer, so present both positions. Objectives: O4. Prerequisites: unit 2.
 ### 04-recovery — Getting Back What You Lost
-Why: the learner's motivation. With chapters 1–3 in place, the reflog is a short step. Objectives: O5. Prerequisites: chapters 2 and 3.
+Why: the learner's motivation. With units 1–3 in place, the reflog is a short step. Objectives: O5. Prerequisites: units 2 and 3.
 
 ## Amendments
-- 2026-11-15: Chapter 4 will open with undoing a botched rebase (`git reflog` plus `git reset --hard`), at the reader's request; that's what cost them work last week.
+- 2026-11-15: Unit 4 will open with undoing a botched rebase (`git reflog` plus `git reset --hard`), at the learner's request; that's what cost them work last week.

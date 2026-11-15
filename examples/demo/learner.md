@@ -13,7 +13,7 @@ Fluent with `add`, `commit`, `push`, `pull` and `switch`. Believed commits store
 Has met "detached HEAD" and backed away from it.
 
 ## Preferences
-Conversational tone; regular active learning (two checks a chapter); short chapters.
+Conversational tone; regular active learning (two checks a unit); short units.
 
 ## Objectives
 | Objective | Status | Evidence |
@@ -27,5 +27,5 @@ Conversational tone; regular active learning (two checks a chapter); short chapt
 ## Inquiry log
 - 2026-11-15 · 01-snapshots #c1-p02 · asked what happens if two files share a hash → curious about integrity; answered with collision detection
 - 2026-11-15 · 01-snapshots #c1-p07 · asked how renames are detected → ready for diff options later
-- 2026-11-15 · 01-snapshots (chapter) · asked for a command that lists the whole snapshot → `git ls-tree -r`
-- 2026-11-15 · book · asked for chapter 4 to cover undoing a bad rebase → amended plan
+- 2026-11-15 · 01-snapshots (unit) · asked for a command that lists the whole snapshot → `git ls-tree -r`
+- 2026-11-15 · workbook · asked for unit 4 to cover undoing a bad rebase → amended plan

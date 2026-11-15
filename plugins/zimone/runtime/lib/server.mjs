@@ -3,12 +3,14 @@ import crypto from 'node:crypto';
 import http from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { BookError, chapterExists, loadBook, readChapter } from './book.mjs';
-import { renderMarkdown } from './render.mjs';
+import { WorkbookError, loadWorkbook, readUnit, unitExists } from './workbook.mjs';
+import { renderMarkdown, validateFields } from './render.mjs';
 
 const SHELL_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'shell');
 const MAX_BODY = 1 << 20;
-const CONFIDENCE_LABELS = { 1: 'guessing', 2: 'fairly sure', 3: 'certain' };
+const STATE_VERSION = 2;
+// What the user can mark a unit as. Extend here (and in the page) to add states.
+const UNIT_STATES = ['done'];
 
 class HttpError extends Error {
   constructor(status, message) {
@@ -30,7 +32,7 @@ function pidAlive(pid) {
   }
 }
 
-// Persistent reader/agent state: threads and the event queue.
+// Persistent user/agent state: threads, the event queue and unit progress.
 class Store {
   constructor(file) {
     this.file = file;
@@ -40,9 +42,11 @@ class Store {
       } catch (err) {
         throw new Error(`cannot parse ${file}: ${err.message}`, { cause: err });
       }
-      if (this.data.version !== 1) throw new Error(`${file}: unsupported state version ${this.data.version}`);
+      if (this.data.version !== STATE_VERSION) {
+        throw new Error(`${file}: state version ${this.data.version} is from another zimone version (this one uses ${STATE_VERSION}); move the .zimone folder aside to start with empty state`);
+      }
     } else {
-      this.data = { version: 1, seq: 0, threads: {}, events: [], finished: {} };
+      this.data = { version: STATE_VERSION, seq: 0, threads: {}, events: [], progress: {} };
     }
   }
   save() {
@@ -73,7 +77,7 @@ class Store {
     return {
       ...t,
       status: this.threadStatus(t),
-      messages: t.messages.map((m) => (m.role === 'zimone' ? { ...m, html: renderMarkdown(m.text) } : m)),
+      messages: t.messages.map((m) => (m.role === 'agent' ? { ...m, html: renderMarkdown(m.text) } : m)),
     };
   }
 }
@@ -115,17 +119,17 @@ function readBody(req) {
 
 export const DEFAULT_PORTS = [4317, 4336]; // inclusive range tried when no --port is given
 
-// Serves a book. port: a number to bind exactly, or null to take the first free port in DEFAULT_PORTS.
+// Serves a workbook. port: a number to bind exactly, or null to take the first free port in DEFAULT_PORTS.
 export async function serve(dir, { port }) {
   const zimoneDir = path.join(dir, '.zimone');
   fs.mkdirSync(zimoneDir, { recursive: true });
   const infoFile = serverInfoFile(dir);
   if (fs.existsSync(infoFile)) {
     const prev = JSON.parse(fs.readFileSync(infoFile, 'utf8'));
-    if (pidAlive(prev.pid)) throw new Error(`a zimone server is already running for this book (pid ${prev.pid}, port ${prev.port})`);
+    if (pidAlive(prev.pid)) throw new Error(`a zimone server is already running for this workbook (pid ${prev.pid}, port ${prev.port})`);
     console.error(`removing stale ${infoFile} (pid ${prev.pid} is gone)`);
   }
-  loadBook(dir); // fail fast on an invalid book.json
+  loadWorkbook(dir); // fail fast on an invalid workbook.json
   const store = new Store(path.join(zimoneDir, 'state.json'));
   // Identifies this server run; event ids can repeat if state.json is reset, so watchers key on it.
   const instance = crypto.randomUUID();
@@ -139,187 +143,154 @@ export async function serve(dir, { port }) {
   const broadcastThread = (t) => broadcast({ type: 'thread', thread: store.publicThread(t) });
 
   // Whether a session is watching: `zimone watch` claims every second, so a gap means it stopped.
-  const TUTOR_TIMEOUT_MS = 5000;
+  const AGENT_TIMEOUT_MS = 5000;
   let lastClaim = 0;
-  let tutorOnline = false;
-  const tutorMessage = () => ({ type: 'tutor', online: tutorOnline });
-  const setTutorOnline = (online) => {
-    if (online === tutorOnline) return;
-    tutorOnline = online;
-    broadcast(tutorMessage());
+  let agentOnline = false;
+  const agentMessage = () => ({ type: 'agent', online: agentOnline });
+  const setAgentOnline = (online) => {
+    if (online === agentOnline) return;
+    agentOnline = online;
+    broadcast(agentMessage());
   };
 
-  const chapterOrThrow = (id) => {
+  const unitOrThrow = (id) => {
     try {
-      return readChapter(dir, id);
+      return readUnit(dir, id);
     } catch (err) {
-      if (err instanceof BookError) throw new HttpError(404, err.message);
+      if (err instanceof WorkbookError) throw new HttpError(404, err.message);
       throw err;
     }
   };
+  const listedUnitOrThrow = (id) => {
+    if (!loadWorkbook(dir).units.some((u) => u.id === id)) throw new HttpError(404, `unit "${id}" is not listed in workbook.json`);
+  };
 
-  const newEvent = (type, threadId, payload) => {
-    const e = { id: store.nextId('e'), type, thread_id: threadId, created: new Date().toISOString(), delivered_at: null, handled_at: null, payload };
+  const newEvent = (type, threadId) => {
+    const e = { id: store.nextId('e'), type, thread_id: threadId, created: new Date().toISOString(), delivered_at: null, handled_at: null, payload: null };
     store.data.events.push(e);
     return e;
   };
 
-  // One ongoing conversation per chapter, plus one for the whole book (chapter: null).
-  const conversationFor = (chapter) => {
-    if (chapter !== null && !loadBook(dir).chapters.some((c) => c.id === chapter)) {
-      throw new HttpError(404, `chapter "${chapter}" is not listed in book.json`);
-    }
-    let t = Object.values(store.data.threads).find((x) => x.kind === 'conversation' && x.chapter === chapter);
-    if (!t) {
-      t = { id: store.nextId('t'), kind: 'conversation', chapter, block_id: null, quote: null, prefix: '', suffix: '', created: new Date().toISOString(), messages: [] };
-      store.data.threads[t.id] = t;
-    }
+  const newThread = (unit, anchor) => {
+    const t = { id: store.nextId('t'), unit, anchor, created: new Date().toISOString(), messages: [] };
+    store.data.threads[t.id] = t;
     return t;
   };
 
-  const routes = {
-    'GET /api/book': () => {
-      const book = loadBook(dir);
-      return {
-        ...book,
-        chapters: book.chapters.map((c) => ({ ...c, exists: chapterExists(dir, c.id), finished: Boolean(store.data.finished[c.id]) })),
-      };
-    },
-    'GET /api/chapter/:id': (_req, { id }) => {
-      const { blocks, ...ch } = chapterOrThrow(id);
-      return { ...ch, finished: Boolean(store.data.finished[id]) };
-    },
-    'GET /api/threads': (_req, _p, query) => {
-      const all = Object.values(store.data.threads);
-      if (query.get('scope') === 'book') {
-        return { threads: all.filter((t) => t.kind === 'conversation' && t.chapter === null).map((t) => store.publicThread(t)) };
-      }
-      const chapter = query.get('chapter');
-      if (!chapter) throw new HttpError(400, '"chapter" (or scope=book) query parameter is required');
-      return { threads: all.filter((t) => t.chapter === chapter).map((t) => store.publicThread(t)) };
-    },
-    'GET /api/thread/:id': (_req, { id }) => store.publicThread(store.thread(id)),
+  // The one thread about a whole unit (or, with unit null, the whole workbook).
+  const scopeThread = (unit) => {
+    if (unit !== null) listedUnitOrThrow(unit);
+    return Object.values(store.data.threads).find((t) => t.unit === unit && t.anchor === null) ?? newThread(unit, null);
+  };
 
-    'POST /api/ask': (body) => {
-      const question = str(body, 'question');
-      const threadId = str(body, 'thread_id', { optional: true });
-      let thread;
-      if (threadId) {
-        thread = store.thread(threadId);
-        if (thread.kind !== 'ask') throw new HttpError(400, `thread ${threadId} is a ${thread.kind} thread`);
-      } else {
-        const chapter = str(body, 'chapter');
-        const ch = chapterOrThrow(chapter);
-        const blockId = str(body, 'block_id', { optional: true });
-        if (blockId && !ch.blocks.some((b) => b.id === blockId)) throw new HttpError(400, `chapter ${chapter} has no block #${blockId}`);
-        const quote = blockId ? str(body, 'quote', { optional: true }) : null;
-        thread = {
-          id: store.nextId('t'),
-          kind: 'ask',
-          chapter,
-          block_id: blockId,
-          quote,
-          prefix: quote ? (str(body, 'prefix', { optional: true }) ?? '') : '',
-          suffix: quote ? (str(body, 'suffix', { optional: true }) ?? '') : '',
-          created: new Date().toISOString(),
-          messages: [],
-        };
-        store.data.threads[thread.id] = thread;
+  // The anchored block as the unit stands now, or null for an unanchored thread.
+  const anchoredBlock = (t) => {
+    if (!t.anchor) return null;
+    const block = unitOrThrow(t.unit).blocks.find((b) => b.id === t.anchor.block);
+    if (!block) throw new HttpError(409, `block #${t.anchor.block} is no longer in unit ${t.unit}`);
+    return block;
+  };
+
+  // Finds or creates the thread a new message goes to. An anchor with a quote (a passage) always
+  // starts a new thread; a whole-block anchor, or none, has exactly one thread.
+  const threadForPost = (body) => {
+    const threadId = str(body, 'thread_id', { optional: true });
+    if (threadId) {
+      if (body.unit !== undefined || body.anchor !== undefined) throw new HttpError(400, 'give "thread_id" or "unit"/"anchor", not both');
+      return store.thread(threadId);
+    }
+    const unit = str(body, 'unit', { optional: true });
+    const a = body.anchor;
+    if (a === undefined || a === null) return scopeThread(unit);
+    if (typeof a !== 'object' || Array.isArray(a)) throw new HttpError(400, '"anchor" must be an object');
+    if (unit === null) throw new HttpError(400, 'an anchored message needs a "unit"');
+    const block = str(a, 'block');
+    if (!unitOrThrow(unit).blocks.some((b) => b.id === block)) throw new HttpError(400, `unit ${unit} has no block #${block}`);
+    const quote = str(a, 'quote', { optional: true });
+    if (quote) {
+      return newThread(unit, { block, quote, prefix: str(a, 'prefix', { optional: true }) ?? '', suffix: str(a, 'suffix', { optional: true }) ?? '' });
+    }
+    return (
+      Object.values(store.data.threads).find((t) => t.unit === unit && t.anchor && t.anchor.block === block && t.anchor.quote === null) ??
+      newThread(unit, { block, quote: null, prefix: '', suffix: '' })
+    );
+  };
+
+  const routes = {
+    'GET /api/workbook': () => {
+      const wb = loadWorkbook(dir);
+      return { ...wb, units: wb.units.map((u) => ({ ...u, exists: unitExists(dir, u.id), state: store.data.progress[u.id]?.state ?? null })) };
+    },
+    'GET /api/units/:id': (_req, { id }) => {
+      const { blocks, ...unit } = unitOrThrow(id);
+      return { ...unit, state: store.data.progress[id]?.state ?? null };
+    },
+    // ?unit=<id> for a unit's threads; ?unit= (empty) for the workbook's.
+    'GET /api/threads': (_req, _p, query) => {
+      if (!query.has('unit')) throw new HttpError(400, '"unit" query parameter is required (empty for the workbook)');
+      const unit = query.get('unit') || null;
+      return { threads: Object.values(store.data.threads).filter((t) => t.unit === unit).map((t) => store.publicThread(t)) };
+    },
+    'GET /api/threads/:id': (_req, { id }) => store.publicThread(store.thread(id)),
+
+    // Everything the user says: a new or follow-up message in some thread.
+    'POST /api/messages': (body) => {
+      const text = str(body, 'text');
+      const thread = threadForPost(body);
+      const block = anchoredBlock(thread);
+      let fields;
+      try {
+        fields = validateFields(thread.anchor && !thread.anchor.quote ? block.type : null, body.fields);
+      } catch (err) {
+        throw new HttpError(400, err.message);
       }
-      thread.messages.push({ role: 'reader', text: question, at: new Date().toISOString() });
-      const e = newEvent('ask', thread.id, null);
+      thread.messages.push({ role: 'user', text, ...(fields ? { fields } : {}), at: new Date().toISOString() });
+      const e = newEvent('message', thread.id);
       // Short fields first, long text last: Monitor notifications may truncate long lines.
       e.payload = {
         id: e.id,
-        type: 'ask',
+        type: 'message',
         thread_id: thread.id,
-        chapter: thread.chapter,
-        block_id: thread.block_id,
-        follow_up: thread.messages.length > 1,
-        question,
-        quote: thread.quote,
+        unit: thread.unit,
+        block: block?.id ?? null,
+        block_type: block?.type ?? null,
+        block_attrs: block?.attrs ?? null,
+        turn: thread.messages.filter((m) => m.role === 'user').length,
+        fields,
+        text,
+        quote: thread.anchor?.quote ?? null,
       };
       store.save();
       broadcastThread(thread);
       return store.publicThread(thread);
     },
 
-    // Reader message to the chapter's conversation, or the book's when "chapter" is null or absent.
-    'POST /api/message': (body) => {
-      const text = str(body, 'text');
-      const chapter = str(body, 'chapter', { optional: true });
-      const thread = conversationFor(chapter);
-      thread.messages.push({ role: 'reader', text, at: new Date().toISOString() });
-      const e = newEvent('message', thread.id, null);
-      e.payload = { id: e.id, type: 'message', thread_id: thread.id, scope: chapter ? 'chapter' : 'book', chapter, text };
-      store.save();
-      broadcastThread(thread);
-      return store.publicThread(thread);
-    },
-
-    'POST /api/answer': (body) => {
-      const chapter = str(body, 'chapter');
-      const checkId = str(body, 'check_id');
-      const response = str(body, 'response');
-      const confidence = body.confidence;
-      if (![1, 2, 3].includes(confidence)) throw new HttpError(400, '"confidence" must be 1, 2 or 3');
-      const ch = chapterOrThrow(chapter);
-      const block = ch.blocks.find((b) => b.id === checkId);
-      if (!block || block.type !== 'check') throw new HttpError(400, `chapter ${chapter} has no check #${checkId}`);
-      let thread = Object.values(store.data.threads).find((t) => t.kind === 'check' && t.chapter === chapter && t.block_id === checkId);
-      if (!thread) {
-        thread = { id: store.nextId('t'), kind: 'check', chapter, block_id: checkId, quote: null, prefix: '', suffix: '', created: new Date().toISOString(), messages: [] };
-        store.data.threads[thread.id] = thread;
-      }
-      thread.messages.push({ role: 'reader', text: response, confidence, at: new Date().toISOString() });
-      const e = newEvent('check_answer', thread.id, null);
-      e.payload = {
-        id: e.id,
-        type: 'check_answer',
-        thread_id: thread.id,
-        chapter,
-        check_id: checkId,
-        objective: block.objective ?? null,
-        attempt: thread.messages.filter((m) => m.role === 'reader').length,
-        confidence,
-        confidence_label: CONFIDENCE_LABELS[confidence],
-        response,
-      };
-      store.save();
-      broadcastThread(thread);
-      return store.publicThread(thread);
-    },
-
-    'POST /api/finished': (body) => {
-      const chapter = str(body, 'chapter');
-      chapterOrThrow(chapter);
-      const book = loadBook(dir);
-      const idx = book.chapters.findIndex((c) => c.id === chapter);
-      const next = book.chapters[idx + 1] ?? null;
-      store.data.finished[chapter] = new Date().toISOString();
-      const pending = store.data.events.some((e) => e.type === 'chapter_finished' && !e.handled_at && e.payload.chapter === chapter);
+    'POST /api/units/:id/state': (body, { id }) => {
+      const state = str(body, 'state');
+      if (!UNIT_STATES.includes(state)) throw new HttpError(400, `"state" must be one of: ${UNIT_STATES.join(', ')}`);
+      unitOrThrow(id);
+      const wb = loadWorkbook(dir);
+      const next = wb.units[wb.units.findIndex((u) => u.id === id) + 1] ?? null;
+      store.data.progress[id] = { state, at: new Date().toISOString() };
+      const pending = store.data.events.some((e) => e.type === 'unit_state' && !e.handled_at && e.payload.unit === id && e.payload.state === state);
       let thread = null;
       if (!pending) {
-        // The finish shows in the chapter's conversation, and zimone answers there when the next chapter is ready.
-        thread = conversationFor(chapter);
-        thread.messages.push({
-          role: 'system',
-          text: next ? 'You marked this chapter finished. zimone will prepare the next one.' : 'You marked the last chapter finished.',
-          at: new Date().toISOString(),
-        });
-        const e = newEvent('chapter_finished', thread.id, null);
-        e.payload = { id: e.id, type: 'chapter_finished', thread_id: thread.id, chapter, next_chapter: next?.id ?? null, next_exists: next ? chapterExists(dir, next.id) : false };
+        // The change shows in the unit's thread, where the agent answers when it has acted on it.
+        thread = scopeThread(id);
+        thread.messages.push({ role: 'system', notice: { type: 'unit_state', state, next_unit: next?.id ?? null }, at: new Date().toISOString() });
+        const e = newEvent('unit_state', thread.id);
+        e.payload = { id: e.id, type: 'unit_state', thread_id: thread.id, unit: id, state, next_unit: next?.id ?? null, next_exists: next ? unitExists(dir, next.id) : false };
         broadcastThread(thread);
       }
       store.save();
-      broadcast({ type: 'book' });
+      broadcast({ type: 'workbook' });
       return { ok: true, thread: thread && store.publicThread(thread) };
     },
 
     // Agent side ------------------------------------------------------------
     'POST /api/events/claim': () => {
       lastClaim = Date.now();
-      setTutorOnline(true);
+      setAgentOnline(true);
       const now = new Date().toISOString();
       const out = [];
       const touched = new Set();
@@ -342,18 +313,17 @@ export async function serve(dir, { port }) {
       if (!e.thread_id) throw new HttpError(400, `event ${e.id} (${e.type}) has no thread to reply to; use ack`);
       const t = store.thread(e.thread_id);
       const at = new Date().toISOString();
-      t.messages.push({ role: 'zimone', text, at, event_id: e.id });
+      t.messages.push({ role: 'agent', text, at, event_id: e.id });
       e.handled_at = at;
       store.save();
       broadcastThread(t);
       return { ok: true, thread_id: t.id };
     },
-    // Agent-initiated message into a conversation (no event involved).
-    'POST /api/say': (body) => {
+    // Agent-initiated message to a unit's thread, or the workbook's (no event involved).
+    'POST /api/post': (body) => {
       const text = str(body, 'text');
-      const chapter = str(body, 'chapter', { optional: true });
-      const thread = conversationFor(chapter);
-      thread.messages.push({ role: 'zimone', text, at: new Date().toISOString() });
+      const thread = scopeThread(str(body, 'unit', { optional: true }));
+      thread.messages.push({ role: 'agent', text, at: new Date().toISOString() });
       store.save();
       broadcastThread(thread);
       return { ok: true, thread_id: thread.id };
@@ -389,13 +359,13 @@ export async function serve(dir, { port }) {
       const url = new URL(req.url, `http://${req.headers.host}`);
       const p = url.pathname;
 
-      if (req.method === 'GET' && (p === '/' || /^\/c\/[\w-]+\/?$/.test(p))) return sendFile(res, path.join(SHELL_DIR, 'index.html'), 'text/html; charset=utf-8');
+      if (req.method === 'GET' && (p === '/' || /^\/u\/[\w-]+\/?$/.test(p))) return sendFile(res, path.join(SHELL_DIR, 'index.html'), 'text/html; charset=utf-8');
       if (req.method === 'GET' && p === '/shell/zimone.js') return sendFile(res, path.join(SHELL_DIR, 'zimone.js'), 'text/javascript; charset=utf-8');
       if (req.method === 'GET' && p === '/shell/zimone.css') return sendFile(res, path.join(SHELL_DIR, 'zimone.css'), 'text/css; charset=utf-8');
       if (req.method === 'GET' && p === '/api/stream') {
         res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-store', Connection: 'keep-alive' });
         res.write(': connected\n\n');
-        res.write(`data: ${JSON.stringify(tutorMessage())}\n\n`);
+        res.write(`data: ${JSON.stringify(agentMessage())}\n\n`);
         clients.add(res);
         req.on('close', () => clients.delete(res));
         return;
@@ -415,7 +385,7 @@ export async function serve(dir, { port }) {
       sendJson(res, 200, result);
     } catch (err) {
       if (err instanceof HttpError) return sendJson(res, err.status, { error: err.message });
-      if (err instanceof BookError) return sendJson(res, 500, { error: err.message });
+      if (err instanceof WorkbookError) return sendJson(res, 500, { error: err.message });
       console.error(err);
       sendJson(res, 500, { error: `internal error: ${err.message}` });
     }
@@ -431,16 +401,16 @@ export async function serve(dir, { port }) {
     if (!filename) return;
     const rel = filename.split(path.sep).join('/');
     if (rel.startsWith('.zimone/')) return;
-    const m = rel.match(/^chapters\/([\w-]+)\.md$/);
-    if (m) notify(`c:${m[1]}`, { type: 'chapter', id: m[1] });
-    else if (rel === 'book.json') notify('book', { type: 'book' });
+    const m = rel.match(/^units\/([\w-]+)\.md$/);
+    if (m) notify(`u:${m[1]}`, { type: 'unit', id: m[1] });
+    else if (rel === 'workbook.json') notify('workbook', { type: 'workbook' });
   });
 
   const keepalive = setInterval(() => {
     for (const res of clients) res.write(': ping\n\n');
   }, 25000);
-  const tutorCheck = setInterval(() => {
-    if (tutorOnline && Date.now() - lastClaim > TUTOR_TIMEOUT_MS) setTutorOnline(false);
+  const agentCheck = setInterval(() => {
+    if (agentOnline && Date.now() - lastClaim > AGENT_TIMEOUT_MS) setAgentOnline(false);
   }, 1000);
 
   const listen = (p) =>
@@ -475,7 +445,7 @@ export async function serve(dir, { port }) {
   const shutdown = () => {
     if (fs.existsSync(infoFile) && JSON.parse(fs.readFileSync(infoFile, 'utf8')).pid === process.pid) fs.unlinkSync(infoFile);
     clearInterval(keepalive);
-    clearInterval(tutorCheck);
+    clearInterval(agentCheck);
     watcher.close();
     for (const res of clients) res.end();
     server.close(() => process.exit(0));

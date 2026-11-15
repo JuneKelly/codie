@@ -4,8 +4,8 @@ Guidance for agents working on zimone itself. For what zimone is and how people 
 [README.md](README.md).
 
 zimone is a Claude Code plugin. A live Claude session interviews a learner, writes a course as a
-folder of Markdown chapters (a "book"), and serves it to the browser. Reader questions, check
-answers and finished chapters flow back to that session through a Monitor running
+folder of Markdown units (a "workbook"), and serves it to the browser. User questions, check
+answers and finished units flow back to that session through a Monitor running
 `zimone watch`. The plugin was called codie until 0.3.0.
 
 ## Layout
@@ -15,14 +15,14 @@ answers and finished chapters flow back to that session through a Monitor runnin
 | `.claude-plugin/marketplace.json` | Makes this repo a one-plugin marketplace (`zimone-marketplace`) |
 | `plugins/zimone/.claude-plugin/plugin.json` | Plugin manifest; `version` gates what installed users get |
 | `plugins/zimone/skills/{new,open}/SKILL.md` | `/zimone:new` and `/zimone:open` |
-| `plugins/zimone/reference/` | Instructions the teaching session reads: `book.md` (format and authoring), `planning.md`, `serving.md` (event handling) |
+| `plugins/zimone/reference/` | Instructions the teaching session reads: `workbook.md` (format and authoring), `planning.md`, `serving.md` (event handling) |
 | `plugins/zimone/runtime/bin/zimone.mjs` | The CLI the skills call |
-| `plugins/zimone/runtime/lib/` | `book.mjs` (loading, folder detection), `render.mjs` (chapter splitting, validation, Markdown), `server.mjs` (HTTP, SSE, state, event queue) |
-| `plugins/zimone/runtime/shell/` | The reader page (`index.html`, `zimone.js`, `zimone.css`) |
+| `plugins/zimone/runtime/lib/` | `workbook.mjs` (loading, folder detection), `render.mjs` (unit splitting, validation, Markdown), `server.mjs` (HTTP, SSE, state, event queue) |
+| `plugins/zimone/runtime/shell/` | The page (`index.html`, `zimone.js`, `zimone.css`) |
 | `plugins/zimone/runtime/vendor/markdown-it/` | Vendored parser; see its `SOURCE.md` |
-| `examples/demo/` | "How Git Actually Works", a sample book (two chapters written, two planned) |
+| `examples/demo/` | "How Git Actually Works", a sample workbook (two units written, two planned) |
 | `docs/screenshots/` | README images, taken from `examples/demo` |
-| `scripts/screenshots/` | `take.mjs` retakes the README images; `seed.mjs` is the reader activity they show |
+| `scripts/screenshots/` | `take.mjs` retakes the README images; `seed.mjs` is the user activity they show |
 | `docs/DESIGN.md` | How zimone works and why |
 | `docs/API.md` | The HTTP, event-stream and event contract between server, page and CLI |
 | `docs/TESTING.md` | How to test changes by hand, including a live tutoring test |
@@ -36,8 +36,8 @@ Run from the repo root. Node 20 or later; there is no install step and no `packa
 
 ```bash
 claude plugin validate .                                          # manifests and skills
-node plugins/zimone/runtime/bin/zimone.mjs check examples/demo    # book and chapter validation
-node plugins/zimone/runtime/bin/zimone.mjs serve examples/demo    # try the reader (run in background)
+node plugins/zimone/runtime/bin/zimone.mjs check examples/demo    # workbook and unit validation
+node plugins/zimone/runtime/bin/zimone.mjs serve examples/demo    # try the page (run in background)
 node plugins/zimone/runtime/bin/zimone.mjs url examples/demo      # the URL that server is on
 ```
 
@@ -48,17 +48,17 @@ tutoring test with a real session.
 ## Rules
 
 - **Find the test server's port with `zimone url`.** Servers take the first free port from 4317,
-  and the user's real books (for example `~/books/…`) may already be running there. Never post
+  and the user's real workbooks (for example `~/workbooks/…`) may already be running there. Never post
   to, clear storage for, or screenshot a port you haven't confirmed is your test server. Test on
   a copy in a scratch folder, so `.zimone/` state doesn't land in `examples/demo`.
-- **Never touch the user's real books** unless asked.
+- **Never touch the user's real workbooks** unless asked.
 - **No runtime dependencies.** Node's standard library only. markdown-it is the one exception and
   is vendored unmodified; upgrade it as `SOURCE.md` describes.
 - **Keep the server local and strict.** It binds to 127.0.0.1, rejects foreign `Host` and
   `Origin` headers, and accepts only JSON POSTs, so other websites can't inject events into the
   user's session. Don't loosen any of that.
-- **Rendered chapter HTML must stay stable.** Reader questions are anchored to block ids and the
-  exact quoted text. A renderer change that alters a chapter's text (even whitespace) can detach
+- **Rendered unit HTML must stay stable.** User questions are anchored to block ids and the
+  exact quoted text. A renderer change that alters a unit's text (even whitespace) can detach
   existing threads; compare `examples/demo` output before and after.
 - **Watcher output is read through Monitor notifications, which truncate long lines.** Keep short
   fields first and long text last in event payloads.
@@ -67,10 +67,15 @@ tutoring test with a real session.
   and settings from `zimone library`. The skills pre-approve
   `Bash(node ${CLAUDE_PLUGIN_ROOT}/runtime/bin/zimone.mjs *)`; new agent-facing features belong
   behind that CLI too.
-- **Stored formats don't change silently.** If `book.json`, the chapter format or
-  `.zimone/state.json` changes so that older data would be misread, bump `BOOK_FORMAT` in
-  `book.mjs` or the state `version` in `server.mjs`, and add a migration or a clear error.
-- **Never suppress errors or default missing required data.** Missing or invalid book data is an
+- **Stored formats don't change silently.** If `workbook.json`, the unit format or
+  `.zimone/state.json` changes so that older data would be misread, bump `WORKBOOK_FORMAT` in
+  `workbook.mjs` or `STATE_VERSION` in `server.mjs`, and add a migration or a clear error.
+- **Keep the data model and API generic.** The server knows workbooks, units, blocks, threads
+  (with an optional anchor), messages (with optional `fields`), unit states and two event types.
+  Teaching ideas (checks, objectives, confidence) belong in the content and the reference docs;
+  the one place the server knows a block type is `RESPONSE_FIELDS` in `render.mjs`. Words the
+  user sees come from `terms` in `workbook.json`, never from the data. See [docs/API.md](docs/API.md).
+- **Never suppress errors or default missing required data.** Missing or invalid workbook data is an
   error with a message that says what to fix.
 
 ## Writing

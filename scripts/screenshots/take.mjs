@@ -20,7 +20,7 @@ const CHROME = process.env.CHROME ?? '/Applications/Google Chrome.app/Contents/M
 const SHOTS = [
   {
     name: 'reader',
-    path: '/c/01-snapshots',
+    path: '/u/01-snapshots',
     // Open the SHA-1 question and scroll the sidebar so its card starts at the top.
     setup: `
       [...document.querySelectorAll('.cx-thread-head')].find((b) => b.textContent.includes('SHA-1 hash')).click();
@@ -32,11 +32,11 @@ const SHOTS = [
   },
   {
     name: 'checks',
-    path: '/c/01-snapshots',
+    path: '/u/01-snapshots',
     setup: `
       document.querySelector('[data-block-id="c1-chk1"]').scrollIntoView({ block: 'start' });
       window.scrollBy(0, -110);
-      [...document.querySelectorAll('.cx-thread-head')].find((b) => b.textContent.includes('Conversation about this chapter')).click();`,
+      [...document.querySelectorAll('.cx-thread-head')].find((b) => b.textContent.includes('Conversation about this unit')).click();`,
   },
   { name: 'contents', path: '/', setup: `document.querySelector('.cx-thread-head').click();` },
 ];

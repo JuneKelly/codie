@@ -7,9 +7,9 @@ that have cost time. Pick the checks that match what you changed; the HTTP API i
 ## Ground rules
 
 - **Test on a scratch copy**, never on `examples/demo` itself (the server would write `.zimone/`
-  into it) and never on the user's real books.
+  into it) and never on the user's real workbooks.
 - **Get the port from `zimone url`.** Each server takes the first free port from 4317, and the
-  user may have a real book open on 4317. Never post to, screenshot or clear storage for a port
+  user may have a real workbook open on 4317. Never post to, screenshot or clear storage for a port
   you haven't confirmed belongs to your test server.
 - **Stop what you start.** Run servers with Bash `run_in_background: true` and stop them with
   TaskStop when done.
@@ -22,7 +22,7 @@ In zsh a command stored in a variable isn't split into words, so `Z="node …"; 
 ```bash
 zi() { node plugins/zimone/runtime/bin/zimone.mjs "$@"; }
 SCRATCH=<your scratchpad folder>
-B="$SCRATCH/book"
+B="$SCRATCH/workbook"
 rm -rf "$B" && cp -R examples/demo "$B"
 ```
 
@@ -37,41 +37,46 @@ U=$(zi url "$B"); U=${U%/}  # waits for the server, prints e.g. http://127.0.0.1
 
 ```bash
 claude plugin validate .                 # after touching manifests or skills
-zi check examples/demo                   # after touching the renderer or the example book
+zi check examples/demo                   # after touching the renderer or the example workbook
 node --check plugins/zimone/runtime/shell/zimone.js   # syntax, for the page script
 ```
 
-**Renderer changes** must not change the text of existing chapters, because reader questions
-are anchored to it. Before and after the change, dump each chapter's HTML and compare:
+**Renderer changes** must not change the text of existing units, because user questions
+are anchored to it. Before and after the change, dump each unit's HTML and compare:
 
 ```bash
-node -e 'import("./plugins/zimone/runtime/lib/book.mjs").then(({readChapter}) => {
-  for (const id of ["01-snapshots", "02-branches"]) console.log(readChapter("examples/demo", id).html);
+node -e 'import("./plugins/zimone/runtime/lib/workbook.mjs").then(({readUnit}) => {
+  for (const id of ["01-snapshots", "02-branches"]) console.log(readUnit("examples/demo", id).html);
 })' > "$SCRATCH/after.html"   # and before.html, then diff them
 ```
 
-## Playing the reader with curl
+## Playing the user with curl
 
-POSTs need `Content-Type: application/json`. Each one below creates an event, except
-`/api/finished` when the same chapter already has an unhandled finish event.
+POSTs need `Content-Type: application/json`. Each one below creates an event, except a repeated
+`done` for a unit whose earlier `unit_state` event is still unhandled.
 
 ```bash
 post() { curl -s -X POST -H 'Content-Type: application/json' -d "$2" "$U$1"; echo; }
-post /api/ask      '{"chapter":"01-snapshots","block_id":"c1-p02","quote":"a SHA-1 hash","question":"Why SHA-1?"}'
-post /api/ask      '{"chapter":"01-snapshots","question":"About the whole chapter"}'
-post /api/message  '{"chapter":"01-snapshots","text":"Hello from the chapter"}'
-post /api/message  '{"text":"Hello from the contents page"}'
-post /api/answer   '{"chapter":"01-snapshots","check_id":"c1-chk1","response":"Snapshots.","confidence":2}'
-post /api/finished '{"chapter":"01-snapshots"}'
-curl -s "$U/api/threads?chapter=01-snapshots"
+post /api/messages '{"unit":"01-snapshots","anchor":{"block":"c1-p02","quote":"a SHA-1 hash"},"text":"Why SHA-1?"}'
+post /api/messages '{"unit":"01-snapshots","text":"Hello from the unit"}'
+post /api/messages '{"text":"Hello from the contents page"}'
+post /api/messages '{"unit":"01-snapshots","anchor":{"block":"c1-chk1"},"text":"Snapshots.","fields":{"confidence":2}}'
+post /api/messages '{"thread_id":"t1","text":"A follow-up"}'
+post /api/units/01-snapshots/state '{"state":"done"}'
+curl -s "$U/api/threads?unit=01-snapshots"
+curl -s "$U/api/threads?unit="          # the workbook's thread
 ```
+
+The error paths are worth a pass too: a check answer without `fields`, `fields` on an ordinary
+message, an anchor without a unit, and an unknown state should each return a 400 with a message
+that says what's wrong.
 
 ## Playing the session with the CLI
 
 ```bash
 timeout 4 zi watch "$B"                      # prints ZIMONE_EVENT lines, then stops
 echo '**Answer**' | zi reply "$B" e2         # use an event id from the watch output
-echo 'Unprompted note' | zi say "$B" --chapter 01-snapshots
+echo 'Unprompted note' | zi post "$B" --unit 01-snapshots
 zi ack "$B" e5
 zi thread "$B" t1
 ```
@@ -89,7 +94,7 @@ Use the built-in browser pane on the URL from `zimone url`. `javascript_tool` is
 to drive the page and read its state, for example:
 
 ```js
-// Ask about a passage the way a reader would: select text, click "Ask about this", submit.
+// Ask about a passage the way a user would: select text, click "Ask about this", submit.
 const p = document.querySelector('[data-block-id="c2-p06"]');
 const w = document.createTreeWalker(p, NodeFilter.SHOW_TEXT);
 let n; while ((n = w.nextNode()) && !n.data.includes('only HEAD'));
@@ -119,7 +124,7 @@ gives byte-identical images, or near enough, so a large diff means the UI change
 ## A live tutoring test
 
 The strongest check, and the only one that tests the skills and reference docs, is a real
-session tutoring a scratch book while you play the reader. It found four real problems on its
+session tutoring a scratch workbook while you play the user. It found four real problems on its
 first run.
 
 1. Copy `examples/demo` to a scratch folder and add a `.gitignore` containing `.zimone/`.
@@ -127,12 +132,12 @@ first run.
    `Read from: …/plugins/zimone`). If the repo folder moved, remove and re-add the marketplace
    (`claude plugin marketplace add ./`) and reinstall.
 3. Start a separate session in the scratch folder (in the desktop app, `start_session` with
-   `cwd`) whose prompt is `/zimone:open` plus "tutor the reader on the page; keep serving until
+   `cwd`) whose prompt is `/zimone:open` plus "tutor the user on the page; keep serving until
    told to stop".
-4. When it reports the book is served, confirm the port with `zimone url <scratch book>`, then
-   act as the reader in the browser: ask about a passage, answer a check, send a chapter message,
-   and finish a chapter.
-5. Check the results: `zi check` passes for the new chapter, `.zimone/state.json` has no
+4. When it reports the workbook is served, confirm the port with `zimone url <scratch workbook>`, then
+   act as the user in the browser: ask about a passage, answer a check, send a unit message,
+   and finish a unit.
+5. Check the results: `zi check` passes for the new unit, `.zimone/state.json` has no
    unhandled events, and `learner.md` and `plan.md` record what happened.
 6. Ask the session to stop its server and Monitor, and to list anything in the skill, the
    references or the CLI that was unclear or needed a workaround. Fix what it reports.

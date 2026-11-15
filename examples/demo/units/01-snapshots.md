@@ -1,6 +1,6 @@
 # Commits Are Snapshots {#c1-h1}
 
-You use Git every working day: `add`, `commit`, `push`, `pull`, and the occasional rescue command pasted from a search result. This book is about what sits underneath those commands. Once you can picture it, most of Git's strange behaviour stops being strange, and the rebase that ate your afternoon becomes something you can undo in a minute. {#c1-p01}
+You use Git every working day: `add`, `commit`, `push`, `pull`, and the occasional rescue command pasted from a search result. This workbook is about what sits underneath those commands. Once you can picture it, most of Git's strange behaviour stops being strange, and the rebase that ate your afternoon becomes something you can undo in a minute. {#c1-p01}
 
 ## Git is a database of objects {#c1-h2}
 

@@ -4,6 +4,20 @@ What each version of the plugin gave its users. Installed users get a change onl
 `version` in `plugins/zimone/.claude-plugin/plugin.json` is bumped; see the `version-bump` skill.
 Add an entry with each bump.
 
+## 0.5.0
+
+- **Workbooks and units.** What were books and chapters are now workbooks and units:
+  `workbook.json` lists `units`, unit files live in `units/`, pages are at `/u/<id>`, and the
+  skills, references and page use the new words.
+- **Display terms.** `workbook.json` can set `terms` so the page shows other words, for example
+  `"unit": ["chapter", "chapters"]`.
+- **A generic API.** One thread model (an optional anchor instead of thread kinds), messages with
+  optional validated `fields`, roles `user`/`agent`/`system`, and two events, `message` and
+  `unit_state`. Routes: `POST /api/messages`, `POST /api/units/:id/state`, `POST /api/post`.
+  `zimone say` is now `zimone post`; `zimone docs book` is now `zimone docs workbook`.
+- **Clean break:** no migration. Folders with `book.json` aren't recognised, and state from
+  earlier versions is refused (state version 2).
+
 ## 0.4.0
 
 - The page shows **zimone away** when no session is watching the book, and waiting questions

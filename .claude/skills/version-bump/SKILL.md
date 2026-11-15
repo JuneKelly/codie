@@ -27,7 +27,7 @@ comment-only edits.
 
 - **Minor** (`0.2.0` → `0.3.0`): new features, commands, events or skill behaviour. Also any
   change to the HTTP API between the reader page and the server, because an old server running
-  alongside an updated page breaks. Also a change to the book format or `.zimone/state.json`
+  alongside an updated page breaks. Also a change to the workbook format or `.zimone/state.json`
   (see below).
 - **Patch** (`0.2.0` → `0.2.1`): bug fixes, styling, and wording changes to skills or reference
   docs that don't change what zimone does.
@@ -36,11 +36,11 @@ Take the larger bump if a push mixes both.
 
 ## Format changes need more than a bump
 
-If a change alters what's stored in a book (`book.json`, the chapter format, or
-`.zimone/state.json`) so that older books or state would be misread:
+If a change alters what's stored in a workbook (`workbook.json`, the unit format, or
+`.zimone/state.json`) so that older workbooks or state would be misread:
 
-- Bump `BOOK_FORMAT` in `runtime/lib/book.mjs`, or the state `version` in `runtime/lib/server.mjs`.
-- Add a migration for existing books, or a clear error that says what to do. Never silently
+- Bump `WORKBOOK_FORMAT` in `runtime/lib/workbook.mjs`, or `STATE_VERSION` in `runtime/lib/server.mjs`.
+- Add a migration for existing workbooks, or a clear error that says what to do. Never silently
   reinterpret old data.
 - Mention the change in the bump's commit message.
 

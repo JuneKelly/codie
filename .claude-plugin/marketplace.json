@@ -1,6 +1,6 @@
 {
   "name": "zimone-marketplace",
-  "description": "The zimone plugin: books you can talk to.",
+  "description": "The zimone plugin: workbooks you can talk to.",
   "owner": {
     "name": "June Kelly"
   },
@@ -8,7 +8,7 @@
     {
       "name": "zimone",
       "source": "./plugins/zimone",
-      "description": "Books you can talk to: an interviewed, adaptive course you read in the browser and question passage by passage."
+      "description": "Workbooks you can talk to: an interviewed, adaptive course you work through in the browser and question passage by passage."
     }
   ]
 }

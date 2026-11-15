@@ -1,6 +1,6 @@
 {
   "name": "zimone",
-  "description": "Books you can talk to: Claude interviews you, writes an adaptive course as a local book, and answers your questions about any passage while you read.",
+  "description": "Workbooks you can talk to: Claude interviews you, writes an adaptive course as a local workbook, and answers your questions about any passage as you work through it.",
   "version": "0.4.0",
   "author": {
     "name": "June Kelly"

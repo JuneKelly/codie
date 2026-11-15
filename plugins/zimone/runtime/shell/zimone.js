@@ -1,8 +1,8 @@
-// zimone reader: renders a chapter, anchors questions to passages, and talks to the zimone server.
+// zimone page: renders a unit, anchors questions to passages, and talks to the zimone server.
 
 const $ = (id) => document.getElementById(id);
 const els = {
-  title: $('cx-book-title'),
+  title: $('cx-workbook-title'),
   conn: $('cx-conn'),
   toggle: $('cx-toggle-side'),
   side: $('cx-side'),
@@ -25,16 +25,17 @@ const els = {
 };
 
 const state = {
-  chapterId: null,
+  unitId: null, // the unit on screen, or null on the contents page
+  terms: null, // workbook.json's display terms: { unit: [singular, plural], workbook: [...] }
   threads: new Map(), // id -> thread
-  anchors: new Map(), // thread id -> 'ok' | 'block' | 'chapter' | 'quote-changed' | 'block-missing'
+  anchors: new Map(), // thread id -> 'ok' | 'block' | 'scope' | 'quote-changed' | 'block-missing'
   pendingAnchor: null, // anchor for the ask composer
   selAnchor: null, // anchor for the floating button
   openThread: null, // id of the one expanded thread in the sidebar, or null
   drafts: new Map(), // thread id -> unsent follow-up text (survives collapsing)
   wasDown: false,
   streamLive: false,
-  tutorOnline: null, // whether a session is watching this book; null until the server says
+  agentOnline: null, // whether a session is watching this workbook; null until the server says
 };
 
 // ---------------------------------------------------------------- utilities
@@ -88,23 +89,27 @@ function reportError(err) {
   toast(err.message);
 }
 
-const AWAY_HINT = 'No Claude session is watching this book. Run /zimone:open in its folder; messages wait until then.';
+// Display terms from workbook.json: term('unit') is "unit" (or "chapter", …), term('unit', true) its plural.
+const term = (key, plural = false) => (state.terms ? state.terms[key][plural ? 1 : 0] : key);
+const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+
+const awayHint = () => `No Claude session is watching this ${term('workbook')}. Run /zimone:open in its folder; messages wait until then.`;
 
 // The header shows the page's link to the server and, when that's up, whether a session is watching.
 function renderConn() {
-  const s = !state.streamLive ? (state.wasDown ? 'down' : 'connecting') : state.tutorOnline === false ? 'away' : 'live';
+  const s = !state.streamLive ? (state.wasDown ? 'down' : 'connecting') : state.agentOnline === false ? 'away' : 'live';
   els.conn.dataset.state = s;
   els.conn.textContent = { live: 'live', away: 'zimone away', down: 'disconnected', connecting: 'connecting' }[s];
-  els.conn.title = s === 'away' ? AWAY_HINT : 'Connection to the zimone server';
+  els.conn.title = s === 'away' ? awayHint() : 'Connection to the zimone server';
 }
 
 // Text for a thread still waiting on zimone: queued (not yet seen) or delivered (seen, no reply yet).
 function pendingText(status) {
-  if (state.tutorOnline === false) return `Waiting for zimone. ${AWAY_HINT}`;
+  if (state.agentOnline === false) return `Waiting for zimone. ${awayHint()}`;
   return status === 'queued' ? 'Waiting for zimone…' : 'zimone is thinking…';
 }
 
-// Sidebar state. Wide screens default to open and remember the reader's choice; narrow screens
+// Sidebar state. Wide screens default to open and remember the user's choice; narrow screens
 // show it as an overlay that starts closed. Both classes are set so either layout reads them.
 const SIDE_KEY = 'zimone.sideClosed';
 const narrow = window.matchMedia('(max-width: 900px)');
@@ -268,14 +273,14 @@ function wrapRange(root, start, end, threadId) {
 }
 
 function applyMark(t) {
-  if (!t.block_id) return 'chapter';
-  const block = blockEl(t.block_id);
+  if (!t.anchor) return 'scope';
+  const block = blockEl(t.anchor.block);
   if (!block) return 'block-missing';
-  if (!t.quote) return 'block';
+  if (!t.anchor.quote) return 'block';
   const root = anchorRoot(block);
-  const start = locate(root, t.quote, t.prefix, t.suffix);
+  const start = locate(root, t.anchor.quote, t.anchor.prefix, t.anchor.suffix);
   if (start === -1) return 'quote-changed';
-  wrapRange(root, start, start + t.quote.length, t.id);
+  wrapRange(root, start, start + t.anchor.quote.length, t.id);
   return 'ok';
 }
 
@@ -297,7 +302,7 @@ function selectionAnchor() {
   const start = offsetIn(root, r.startContainer, r.startOffset) + (raw.length - raw.trimStart().length);
   const text = blockText(root);
   return {
-    block_id: block.dataset.blockId,
+    block: block.dataset.blockId,
     quote,
     prefix: text.slice(Math.max(0, start - 40), start),
     suffix: text.slice(start + quote.length, start + quote.length + 40),
@@ -312,20 +317,36 @@ function statusLine(t) {
   return null;
 }
 
-function messageEl(m) {
-  if (m.role === 'system') return el('div', { class: 'cx-msg cx-msg-system', text: m.text });
-  if (m.role === 'zimone') {
-    return el('div', { class: 'cx-msg cx-msg-zimone' }, el('div', { class: 'cx-msg-label', text: 'zimone' }), el('div', { html: m.html }));
+// System messages carry a structured notice; the page words it with the workbook's terms.
+function noticeText(n) {
+  if (n.type === 'unit_state' && n.state === 'done') {
+    return n.next_unit ? `You marked this ${term('unit')} done. zimone will prepare the next one.` : `You marked the last ${term('unit')} done.`;
   }
-  const conf = m.confidence ? ` · ${['', 'guessing', 'fairly sure', 'certain'][m.confidence]}` : '';
-  return el('div', { class: 'cx-msg' }, conf ? el('div', { class: 'cx-msg-label', text: `Your answer${conf}` }) : null, el('div', { class: 'cx-msg-reader', text: m.text }));
+  return `${n.type}: ${n.state}`;
 }
 
-// Which replies the reader has seen, per browser: {"<thread id>@<created>": zimone reply count}.
-// Keyed with the creation time because thread ids restart when a book's server state is reset.
+const CONFIDENCE = ['', 'guessing', 'fairly sure', 'certain'];
+
+function messageEl(m) {
+  if (m.role === 'system') return el('div', { class: 'cx-msg cx-msg-system', text: m.notice ? noticeText(m.notice) : m.text });
+  if (m.role === 'agent') {
+    return el('div', { class: 'cx-msg cx-msg-agent' }, el('div', { class: 'cx-msg-label', text: 'zimone' }), el('div', { html: m.html }));
+  }
+  const conf = m.fields?.confidence ? ` · ${CONFIDENCE[m.fields.confidence]}` : '';
+  return el('div', { class: 'cx-msg' }, conf ? el('div', { class: 'cx-msg-label', text: `Your answer${conf}` }) : null, el('div', { class: 'cx-msg-user', text: m.text }));
+}
+
+// Threads come in three shapes: the unit's (or workbook's) own thread, which has no anchor; a
+// question about a passage (anchored with a quote); and responses to a whole block such as a check,
+// shown inside that block when it has a place for them.
+const isScopeThread = (t) => t.anchor === null;
+const blockBox = (t) => (t.anchor && !t.anchor.quote ? blockEl(t.anchor.block)?.querySelector(':scope > .cx-feedback') : null);
+
+// Which replies the user has seen, per browser: {"<thread id>@<created>": agent reply count}.
+// Keyed with the creation time because thread ids restart when a workbook's server state is reset.
 const SEEN_KEY = 'zimone.seenReplies';
 const threadKey = (t) => `${t.id}@${t.created}`;
-const replyCount = (t) => t.messages.filter((m) => m.role === 'zimone').length;
+const replyCount = (t) => t.messages.filter((m) => m.role === 'agent').length;
 const seen = (() => {
   try {
     return JSON.parse(localStorage.getItem(SEEN_KEY) ?? '{}');
@@ -347,7 +368,7 @@ function markSeen(t) {
 }
 
 function jumpTo(t) {
-  const target = els.content.querySelector(`mark[data-thread-id="${t.id}"]`) || (t.block_id && blockEl(t.block_id));
+  const target = els.content.querySelector(`mark[data-thread-id="${t.id}"]`) || (t.anchor && blockEl(t.anchor.block));
   if (!target) return;
   target.scrollIntoView({ behavior: 'smooth', block: 'center' });
   setActive(t.id);
@@ -379,30 +400,32 @@ function openThread(id) {
 
 function chipText(t) {
   if (t.status === 'queued') return 'waiting';
-  if (t.status === 'delivered') return state.tutorOnline === false ? 'waiting' : 'thinking…';
-  if (t.kind === 'conversation') return t.messages.length === 1 ? '1 message' : `${t.messages.length} messages`;
+  if (t.status === 'delivered') return state.agentOnline === false ? 'waiting' : 'thinking…';
+  if (isScopeThread(t)) return t.messages.length === 1 ? '1 message' : `${t.messages.length} messages`;
   const n = replyCount(t);
   return n === 0 ? 'no reply' : n === 1 ? '1 reply' : `${n} replies`;
 }
 
-const ANCHOR_NOTES = {
+const anchorNotes = () => ({
   'quote-changed': ['passage revised', 'This passage has been revised since you asked.'],
-  'block-missing': ['passage removed', 'This passage is no longer in the chapter.'],
-};
+  'block-missing': ['passage removed', `This passage is no longer in the ${term('unit')}.`],
+});
 
 function threadCard(t) {
   const open = state.openThread === t.id;
-  const note = ANCHOR_NOTES[state.anchors.get(t.id)];
-  const convo = t.kind === 'conversation';
-  // A conversation previews its latest message; a passage thread previews the question that started it.
-  const rawPreview = convo ? (t.messages[t.messages.length - 1]?.text ?? '') : (t.messages.find((m) => m.role === 'reader')?.text ?? '');
+  const note = anchorNotes()[state.anchors.get(t.id)];
+  const convo = isScopeThread(t);
+  const quote = t.anchor?.quote ?? null;
+  // The scope thread previews its latest message; a passage thread previews the question that started it.
+  const latest = t.messages[t.messages.length - 1];
+  const rawPreview = convo ? (latest?.notice ? noticeText(latest.notice) : (latest?.text ?? '')) : (t.messages.find((m) => m.role === 'user')?.text ?? '');
   // zimone's messages are Markdown; show links and emphasis as plain text in the one-line preview.
   const preview = rawPreview.replace(/\[([^\]]+)\]\([^)]*\)/g, '$1').replace(/[*_`#>]/g, '');
-  const label = convo ? (t.chapter ? 'Conversation about this chapter' : 'Conversation about the book') : (t.quote ?? 'About the whole chapter');
+  const label = convo ? (t.unit ? `Conversation about this ${term('unit')}` : `Conversation about the ${term('workbook')}`) : (quote ?? `About block #${t.anchor.block}`);
   const head = el(
     'button',
     { type: 'button', class: 'cx-thread-head', 'aria-expanded': String(open), onclick: () => openThread(open ? null : t.id) },
-    el('span', { class: t.quote ? 'cx-thread-quote' : 'cx-thread-quote cx-thread-chapter', text: label }),
+    el('span', { class: quote ? 'cx-thread-quote' : 'cx-thread-quote cx-thread-scope', text: label }),
     open ? null : el('span', { class: 'cx-thread-q', text: preview }),
     el(
       'span',
@@ -416,13 +439,13 @@ function threadCard(t) {
   if (!open) return card;
 
   const body = el('div', { class: 'cx-thread-body' });
-  if (t.quote) body.append(el('blockquote', { class: 'cx-quote', 'data-jump': true, title: 'Show in text', text: t.quote, onclick: () => jumpTo(t) }));
+  if (quote) body.append(el('blockquote', { class: 'cx-quote', 'data-jump': true, title: 'Show in text', text: quote, onclick: () => jumpTo(t) }));
   if (note) body.append(el('div', { class: 'cx-thread-meta cx-detached', text: note[1] }));
   for (const m of t.messages) body.append(messageEl(m));
   const status = statusLine(t);
   if (status) body.append(status);
   if (convo) {
-    // The message box at the bottom of the sidebar is this conversation's input.
+    // The message box at the bottom of the sidebar is this thread's input.
     card.append(body);
     return card;
   }
@@ -439,7 +462,7 @@ function threadCard(t) {
     text.value = '';
     state.drafts.delete(t.id);
     try {
-      upsertThread(await api('/api/ask', { thread_id: t.id, question }));
+      upsertThread(await api('/api/messages', { thread_id: t.id, text: question }));
     } catch (err) {
       reportError(err);
       state.drafts.set(t.id, question);
@@ -464,14 +487,14 @@ function blockOrder() {
 function renderThreads() {
   const order = blockOrder();
   const all = [...state.threads.values()];
-  const convo = all.filter((t) => t.kind === 'conversation');
-  const asks = all.filter((t) => t.kind === 'ask');
-  asks.sort((a, b) => (order.get(a.block_id) ?? -1) - (order.get(b.block_id) ?? -1) || a.created.localeCompare(b.created));
-  els.threads.replaceChildren(...[...convo, ...asks].map(threadCard));
-  els.empty.hidden = convo.length + asks.length > 0;
-  els.empty.textContent = state.chapterId
+  const convo = all.filter(isScopeThread);
+  const anchored = all.filter((t) => !isScopeThread(t) && !blockBox(t));
+  anchored.sort((a, b) => (order.get(a.anchor.block) ?? -1) - (order.get(b.anchor.block) ?? -1) || a.created.localeCompare(b.created));
+  els.threads.replaceChildren(...[...convo, ...anchored].map(threadCard));
+  els.empty.hidden = convo.length + anchored.length > 0;
+  els.empty.textContent = state.unitId
     ? 'Message zimone below, or select a passage to ask about it.'
-    : 'Message zimone below about the book: what to cover next, how it’s going, anything.';
+    : `Message zimone below about the ${term('workbook')}: what to cover next, how it’s going, anything.`;
 }
 
 function replaceCard(t) {
@@ -488,13 +511,13 @@ function replaceCard(t) {
 function upsertThread(t) {
   const prev = state.threads.get(t.id);
   state.threads.set(t.id, t);
-  if (t.kind === 'check') return renderCheck(t);
+  if (blockBox(t)) return renderBlockThread(t);
   if (!prev) state.anchors.set(t.id, applyMark(t));
   const visible = t.id === state.openThread && document.body.classList.contains('cx-side-open');
   if (visible) markSeen(t);
   replaceCard(t);
   if (prev && replyCount(t) > replyCount(prev) && !visible) {
-    toast(t.kind === 'conversation' ? 'New message from zimone' : 'zimone answered', {
+    toast(isScopeThread(t) ? 'New message from zimone' : 'zimone answered', {
       label: 'Show',
       run: () => {
         openSide();
@@ -525,7 +548,7 @@ function decorateChecks() {
       if (!picked) return toast('Say how sure you are.');
       submit.disabled = true;
       try {
-        upsertThread(await api('/api/answer', { chapter: state.chapterId, check_id: id, response, confidence: Number(picked.value) }));
+        upsertThread(await api('/api/messages', { unit: state.unitId, anchor: { block: id }, text: response, fields: { confidence: Number(picked.value) } }));
         text.value = '';
         picked.checked = false;
       } catch (err) {
@@ -538,14 +561,14 @@ function decorateChecks() {
   }
 }
 
-function renderCheck(t) {
-  const block = blockEl(t.block_id);
-  const box = block?.querySelector('.cx-feedback');
+// Shows a whole-block thread (the responses to a check) inside its block.
+function renderBlockThread(t) {
+  const box = blockBox(t);
   if (!box) return;
   const status = statusLine(t);
   box.replaceChildren(...t.messages.map(messageEl), ...(status ? [status] : []));
-  const form = block.querySelector('.cx-check-form button[type=submit]');
-  if (form) form.textContent = t.messages.length ? 'Try again' : 'Submit answer';
+  const submit = box.parentElement.querySelector('.cx-check-form button[type=submit]');
+  if (submit) submit.textContent = t.messages.length ? 'Try again' : 'Submit answer';
 }
 
 // ---------------------------------------------------------------- views
@@ -568,21 +591,21 @@ function checkDrafts() {
   return drafts;
 }
 
-function renderPager(ch) {
-  const side = (c, prev) => {
-    if (!c) return el('span');
-    if (!c.exists) return el('span', { text: `${prev ? 'Previous' : 'Next'}: ${c.title} (not written yet)` });
-    return el('a', { href: `/c/${c.id}`, text: prev ? `← ${c.title}` : `${c.title} →` });
+function renderPager(u) {
+  const side = (n, prev) => {
+    if (!n) return el('span');
+    if (!n.exists) return el('span', { text: `${prev ? 'Previous' : 'Next'}: ${n.title} (not written yet)` });
+    return el('a', { href: `/u/${n.id}`, text: prev ? `← ${n.title}` : `${n.title} →` });
   };
-  els.pager.replaceChildren(side(ch.prev, true), side(ch.next, false));
+  els.pager.replaceChildren(side(u.prev, true), side(u.next, false));
 }
 
-async function loadChapter(id, { preserve = false } = {}) {
+async function loadUnit(id, { preserve = false } = {}) {
   const anchor = preserve ? scrollAnchor() : null;
   const drafts = preserve ? checkDrafts() : new Map();
-  let book, ch, threads;
+  let wb, unit, threads;
   try {
-    [book, ch, { threads }] = await Promise.all([api('/api/book'), api(`/api/chapter/${id}`), api(`/api/threads?chapter=${encodeURIComponent(id)}`)]);
+    [wb, unit, { threads }] = await Promise.all([api('/api/workbook'), api(`/api/units/${id}`), api(`/api/threads?unit=${encodeURIComponent(id)}`)]);
   } catch (err) {
     els.banner.hidden = false;
     els.banner.textContent = err.message;
@@ -590,25 +613,27 @@ async function loadChapter(id, { preserve = false } = {}) {
     els.finish.hidden = true;
     return;
   }
-  state.chapterId = id;
+  state.unitId = id;
+  state.terms = wb.terms;
+  renderConn();
   els.composeText.placeholder = composePlaceholder();
-  els.title.textContent = book.title;
-  document.title = `${ch.title} · ${book.title}`;
+  els.title.textContent = wb.title;
+  document.title = `${unit.title} · ${wb.title}`;
 
-  els.banner.hidden = ch.errors.length === 0;
-  if (ch.errors.length) {
+  els.banner.hidden = unit.errors.length === 0;
+  if (unit.errors.length) {
     els.banner.replaceChildren(
-      document.createTextNode('This chapter has formatting errors (zimone has been asked to keep chapters valid):'),
-      el('ul', {}, ...ch.errors.map((e) => el('li', { text: `line ${e.line}: ${e.message}` }))),
+      document.createTextNode(`This ${term('unit')} has formatting errors (zimone has been asked to keep them valid):`),
+      el('ul', {}, ...unit.errors.map((e) => el('li', { text: `line ${e.line}: ${e.message}` }))),
     );
   }
 
-  els.content.innerHTML = ch.html;
+  els.content.innerHTML = unit.html;
   decorateChecks();
   state.threads = new Map(threads.map((t) => [t.id, t]));
   state.anchors = new Map();
   for (const t of threads) {
-    if (t.kind === 'check') renderCheck(t);
+    if (blockBox(t)) renderBlockThread(t);
     else state.anchors.set(t.id, applyMark(t));
   }
   renderThreads();
@@ -620,9 +645,11 @@ async function loadChapter(id, { preserve = false } = {}) {
     if (d.conf) check.querySelector(`input[value="${d.conf}"]`).checked = true;
   }
 
-  renderPager(ch);
+  renderPager(unit);
   els.finish.hidden = false;
-  els.finishNote.textContent = ch.finished ? 'You marked this chapter finished.' : 'Tells zimone to prepare the next chapter based on how this one went.';
+  els.finishBtn.textContent = `I've finished this ${term('unit')}`;
+  els.finishNote.textContent =
+    unit.state === 'done' ? `You marked this ${term('unit')} done.` : `Tells zimone to prepare the next ${term('unit')} based on how this one went.`;
 
   if (anchor) {
     const n = blockEl(anchor.id);
@@ -632,23 +659,25 @@ async function loadChapter(id, { preserve = false } = {}) {
 
 async function loadToc() {
   document.body.classList.add('cx-toc-view');
-  let book, threads;
+  let wb, threads;
   try {
-    [book, { threads }] = await Promise.all([api('/api/book'), api('/api/threads?scope=book')]);
+    [wb, { threads }] = await Promise.all([api('/api/workbook'), api('/api/threads?unit=')]);
   } catch (err) {
     els.banner.hidden = false;
     els.banner.textContent = err.message;
     return;
   }
-  els.title.textContent = book.title;
-  document.title = book.title;
-  const items = book.chapters.map((c) => {
-    const tag = c.finished ? el('span', { class: 'cx-tag', text: 'finished' }) : null;
-    if (!c.exists) return el('li', { class: 'cx-pending' }, document.createTextNode(c.title), el('span', { class: 'cx-tag', text: 'not written yet' }));
-    return el('li', {}, el('a', { href: `/c/${c.id}`, text: c.title }), tag);
+  state.terms = wb.terms;
+  renderConn();
+  els.title.textContent = wb.title;
+  document.title = wb.title;
+  const items = wb.units.map((u) => {
+    const tag = u.state ? el('span', { class: 'cx-tag', text: u.state }) : null;
+    if (!u.exists) return el('li', { class: 'cx-pending' }, document.createTextNode(u.title), el('span', { class: 'cx-tag', text: 'not written yet' }));
+    return el('li', {}, el('a', { href: `/u/${u.id}`, text: u.title }), tag);
   });
   els.content.replaceChildren(
-    el('div', { class: 'cx-toc' }, el('h1', { text: book.title }), book.subtitle ? el('p', { class: 'cx-subtitle', text: book.subtitle }) : null, el('h2', { text: 'Contents' }), el('ol', {}, ...items)),
+    el('div', { class: 'cx-toc' }, el('h1', { text: wb.title }), wb.subtitle ? el('p', { class: 'cx-subtitle', text: wb.subtitle }) : null, el('h2', { text: 'Contents' }), el('ol', {}, ...items)),
   );
   state.threads = new Map(threads.map((t) => [t.id, t]));
   els.composeText.placeholder = composePlaceholder();
@@ -658,7 +687,7 @@ async function loadToc() {
 // ---------------------------------------------------------------- compose
 
 const composePlaceholder = () =>
-  state.pendingAnchor ? 'Ask about this passage…' : state.chapterId ? 'Message zimone about this chapter…' : 'Message zimone about this book…';
+  state.pendingAnchor ? 'Ask about this passage…' : `Message zimone about this ${term(state.unitId ? 'unit' : 'workbook')}…`;
 
 // Attaches a passage to the message box (or detaches it with null).
 function attachPassage(anchor) {
@@ -682,10 +711,9 @@ els.compose.addEventListener('submit', async (ev) => {
   const btn = els.compose.querySelector('button[type=submit]');
   btn.disabled = true;
   try {
-    // With a passage attached, the message starts its own thread; otherwise it joins the conversation.
-    const t = a
-      ? await api('/api/ask', { chapter: state.chapterId, block_id: a.block_id, quote: a.quote, prefix: a.prefix, suffix: a.suffix, question: text })
-      : await api('/api/message', { chapter: state.chapterId, text });
+    // With a passage attached, the message starts its own thread; otherwise it joins the unit's thread.
+    const anchor = a ? { block: a.block, quote: a.quote, prefix: a.prefix, suffix: a.suffix } : null;
+    const t = await api('/api/messages', { unit: state.unitId, anchor, text });
     els.composeText.value = '';
     attachPassage(null);
     getSelection().removeAllRanges();
@@ -718,7 +746,7 @@ document.addEventListener('keydown', (ev) => {
 
 // Floating "Ask about this" button for selections.
 function updateAskButton() {
-  const a = state.chapterId ? selectionAnchor() : null;
+  const a = state.unitId ? selectionAnchor() : null;
   state.selAnchor = a;
   if (!a) {
     els.askSel.hidden = true;
@@ -753,8 +781,8 @@ els.content.addEventListener('click', (ev) => {
 els.finishBtn.addEventListener('click', async () => {
   els.finishBtn.disabled = true;
   try {
-    const { thread } = await api('/api/finished', { chapter: state.chapterId });
-    els.finishNote.textContent = 'Marked finished. zimone will prepare what comes next.';
+    const { thread } = await api(`/api/units/${encodeURIComponent(state.unitId)}/state`, { state: 'done' });
+    els.finishNote.textContent = 'Marked done. zimone will prepare what comes next.';
     if (thread) {
       upsertThread(thread);
       openSide();
@@ -786,23 +814,27 @@ function connectStream() {
   };
   es.onmessage = (ev) => {
     const msg = JSON.parse(ev.data);
-    if (msg.type === 'tutor') {
-      state.tutorOnline = msg.online;
+    if (msg.type === 'agent') {
+      state.agentOnline = msg.online;
       renderConn();
-      for (const t of state.threads.values()) if (t.kind !== 'check' && (t.status === 'queued' || t.status === 'delivered')) replaceCard(t);
-    } else if (msg.type === 'thread' && msg.thread.chapter === state.chapterId) upsertThread(msg.thread);
-    else if (msg.type === 'chapter' && msg.id === state.chapterId) {
-      loadChapter(state.chapterId, { preserve: true }).then(() => toast('zimone updated this chapter'), reportError);
-    } else if (msg.type === 'book' || msg.type === 'chapter') resync();
+      for (const t of state.threads.values()) {
+        if (t.status !== 'queued' && t.status !== 'delivered') continue;
+        if (blockBox(t)) renderBlockThread(t);
+        else replaceCard(t);
+      }
+    } else if (msg.type === 'thread' && msg.thread.unit === state.unitId) upsertThread(msg.thread);
+    else if (msg.type === 'unit' && msg.id === state.unitId) {
+      loadUnit(state.unitId, { preserve: true }).then(() => toast(`zimone updated this ${term('unit')}`), reportError);
+    } else if (msg.type === 'workbook' || msg.type === 'unit') resync();
   };
 }
 
 function resync() {
-  if (state.chapterId) loadChapter(state.chapterId, { preserve: true }).catch(reportError);
+  if (state.unitId) loadUnit(state.unitId, { preserve: true }).catch(reportError);
   else if (document.body.classList.contains('cx-toc-view')) loadToc().catch(reportError);
 }
 
-const route = location.pathname.match(/^\/c\/([\w-]+)\/?$/);
+const route = location.pathname.match(/^\/u\/([\w-]+)\/?$/);
 connectStream();
-if (route) loadChapter(route[1]).catch(reportError);
+if (route) loadUnit(route[1]).catch(reportError);
 else loadToc().catch(reportError);

@@ -1,26 +1,26 @@
 #!/usr/bin/env node
-// zimone CLI: serve a book, stream reader events to the agent, and reply to them.
+// zimone CLI: serve a workbook, stream user events to the agent, and reply to them.
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { BookError, chapterExists, chapterFile, detectFolder, loadBook, resolveBookDir } from '../lib/book.mjs';
-import { renderChapter } from '../lib/render.mjs';
+import { WorkbookError, detectFolder, loadWorkbook, resolveWorkbookDir, unitExists, unitFile } from '../lib/workbook.mjs';
+import { renderUnit } from '../lib/render.mjs';
 import { DEFAULT_PORTS, serve, serverInfoFile } from '../lib/server.mjs';
 
 const USAGE = `usage:
-  zimone docs   <name>...             print reference docs for the agent (book, planning, serving)
-  zimone library <data-dir> [--set <path>]  show or set the book library folder
-  zimone detect [folder]             classify a folder: book | brief | empty | other | missing
-  zimone serve  <book> [--port <n>]    serve the book (run in the background); default: first free
-                                      port in ${DEFAULT_PORTS[0]}–${DEFAULT_PORTS[1]}
-  zimone url    <book>                 wait for the book's server and print its URL
-  zimone watch  <book>                 print one ZIMONE_EVENT line per reader event (for Monitor)
-  zimone reply  <book> <event-id>      reply to an ask/check event; reply Markdown on stdin
-  zimone say    <book> [--chapter <id>]  post to a chapter's conversation (default: the book's);
-                                      Markdown on stdin
-  zimone ack    <book> <event-id>      mark an event handled without replying
-  zimone thread <book> <thread-id>     print a thread's history
-  zimone check  <book> [chapter-id]    validate book.json and chapter files`;
+  zimone docs    <name>...                  print reference docs for the agent (workbook, planning, serving)
+  zimone library <data-dir> [--set <path>]  show or set the workbook library folder
+  zimone detect  [folder]                   classify a folder: workbook | brief | empty | other | missing
+  zimone serve   <workbook> [--port <n>]    serve the workbook (run in the background); default: first
+                                            free port in ${DEFAULT_PORTS[0]}–${DEFAULT_PORTS[1]}
+  zimone url     <workbook>                 wait for the workbook's server and print its URL
+  zimone watch   <workbook>                 print one ZIMONE_EVENT line per user event (for Monitor)
+  zimone reply   <workbook> <event-id>      reply to an event in its thread; Markdown on stdin
+  zimone post    <workbook> [--unit <id>]   post to a unit's thread (default: the workbook's);
+                                            Markdown on stdin
+  zimone ack     <workbook> <event-id>      mark an event handled without replying
+  zimone thread  <workbook> <thread-id>     print a thread's history
+  zimone check   <workbook> [unit-id]       validate workbook.json and unit files`;
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -87,21 +87,21 @@ async function watch(dir) {
 }
 
 function check(dir, only) {
-  const book = loadBook(dir);
-  const targets = only ? book.chapters.filter((c) => c.id === only) : book.chapters;
-  if (only && targets.length === 0) throw new BookError(`chapter "${only}" is not listed in book.json`);
+  const wb = loadWorkbook(dir);
+  const targets = only ? wb.units.filter((u) => u.id === only) : wb.units;
+  if (only && targets.length === 0) throw new WorkbookError(`unit "${only}" is not listed in workbook.json`);
   let errorCount = 0;
-  for (const c of targets) {
-    const file = chapterFile(dir, c.id);
+  for (const u of targets) {
+    const file = unitFile(dir, u.id);
     const rel = path.relative(process.cwd(), file);
-    if (!chapterExists(dir, c.id)) {
+    if (!unitExists(dir, u.id)) {
       if (only) {
         console.log(`${rel}: missing`);
         errorCount += 1;
       } else console.log(`${rel}: not written yet`);
       continue;
     }
-    const { blocks, errors } = renderChapter(fs.readFileSync(file, 'utf8'));
+    const { blocks, errors } = renderUnit(fs.readFileSync(file, 'utf8'));
     for (const e of errors) console.log(`${rel}:${e.line}: ${e.message}`);
     errorCount += errors.length;
     const checks = blocks.filter((b) => b.type === 'check').length;
@@ -112,7 +112,7 @@ function check(dir, only) {
 }
 
 async function main() {
-  const [cmd, bookArg, ...rest] = process.argv.slice(2);
+  const [cmd, arg, ...rest] = process.argv.slice(2);
   if (!cmd || cmd === '-h' || cmd === '--help') {
     console.log(USAGE);
     return;
@@ -122,16 +122,16 @@ async function main() {
     // through the pre-approved CLI avoids a file-read permission prompt.
     const refDir = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'reference');
     const names = fs.readdirSync(refDir).filter((n) => n.endsWith('.md')).map((n) => n.slice(0, -3));
-    const wanted = [bookArg, ...rest].filter(Boolean);
+    const wanted = [arg, ...rest].filter(Boolean);
     const unknown = wanted.filter((n) => !names.includes(n));
     if (!wanted.length || unknown.length) fail(`docs needs one or more of: ${names.join(', ')}${unknown.length ? ` (unknown: ${unknown.join(', ')})` : ''}`);
     process.stdout.write(wanted.map((n) => fs.readFileSync(path.join(refDir, `${n}.md`), 'utf8')).join('\n---\n\n'));
     return;
   }
   if (cmd === 'library') {
-    // bookArg is the plugin data dir (${CLAUDE_PLUGIN_DATA}); config.json there holds {"library": "<abs path>"}.
-    if (!bookArg) fail('library needs the plugin data directory');
-    const configFile = path.join(path.resolve(bookArg), 'config.json');
+    // arg is the plugin data dir (${CLAUDE_PLUGIN_DATA}); config.json there holds {"library": "<abs path>"}.
+    if (!arg) fail('library needs the plugin data directory');
+    const configFile = path.join(path.resolve(arg), 'config.json');
     const i = rest.indexOf('--set');
     if (i === -1) {
       if (!fs.existsSync(configFile)) {
@@ -154,11 +154,11 @@ async function main() {
     return;
   }
   if (cmd === 'detect') {
-    const target = path.resolve(bookArg ?? '.');
+    const target = path.resolve(arg ?? '.');
     console.log(`${detectFolder(target)} ${target}`);
     return;
   }
-  const dir = resolveBookDir(bookArg);
+  const dir = resolveWorkbookDir(arg);
   switch (cmd) {
     case 'serve': {
       const i = rest.indexOf('--port');
@@ -187,14 +187,14 @@ async function main() {
       console.log(`replied to ${eventId} in thread ${r.thread_id}`);
       return;
     }
-    case 'say': {
-      const i = rest.indexOf('--chapter');
-      const chapter = i === -1 ? null : rest[i + 1];
-      if (i !== -1 && !chapter) fail('--chapter needs a chapter id');
+    case 'post': {
+      const i = rest.indexOf('--unit');
+      const unit = i === -1 ? null : rest[i + 1];
+      if (i !== -1 && !unit) fail('--unit needs a unit id');
       const text = await readStdin();
       if (!text) fail('message text on stdin is empty');
-      const r = await call(dir, 'POST', '/api/say', { chapter, text });
-      console.log(`posted to ${chapter ? `chapter ${chapter}` : 'the book'} conversation (thread ${r.thread_id})`);
+      const r = await call(dir, 'POST', '/api/post', { unit, text });
+      console.log(`posted to ${unit ? `unit ${unit}` : 'the workbook'}'s thread (thread ${r.thread_id})`);
       return;
     }
     case 'ack': {
@@ -207,12 +207,14 @@ async function main() {
     case 'thread': {
       const [threadId] = rest;
       if (!threadId) fail('thread needs a <thread-id>');
-      const t = await call(dir, 'GET', `/api/thread/${threadId}`);
-      console.log(`thread ${t.id} (${t.kind}) — chapter ${t.chapter}${t.block_id ? `, block #${t.block_id}` : ''} — ${t.status}`);
-      if (t.quote) console.log(`quote: "${t.quote}"`);
+      const t = await call(dir, 'GET', `/api/threads/${threadId}`);
+      const where = t.unit ? `unit ${t.unit}${t.anchor ? `, block #${t.anchor.block}` : ''}` : 'the workbook';
+      console.log(`thread ${t.id} — ${where} — ${t.status}`);
+      if (t.anchor?.quote) console.log(`quote: "${t.anchor.quote}"`);
       for (const m of t.messages) {
-        const conf = m.confidence ? ` [confidence ${m.confidence}/3]` : '';
-        console.log(`\n${m.role}${conf} @ ${m.at}:\n${m.text}`);
+        const fields = m.fields ? ` ${JSON.stringify(m.fields)}` : '';
+        const body = m.notice ? `[${m.notice.type}: ${m.notice.state}]` : m.text;
+        console.log(`\n${m.role}${fields} @ ${m.at}:\n${body}`);
       }
       return;
     }

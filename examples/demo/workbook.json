@@ -2,7 +2,7 @@
   "title": "How Git Actually Works",
   "subtitle": "From the commands you type to the objects underneath",
   "zimone_format": 1,
-  "chapters": [
+  "units": [
     { "id": "01-snapshots", "title": "Commits Are Snapshots" },
     { "id": "02-branches", "title": "Branches Are Just Pointers" },
     { "id": "03-merge-rebase", "title": "Merging and Rebasing, Drawn Out" },

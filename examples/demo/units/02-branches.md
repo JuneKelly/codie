@@ -1,6 +1,6 @@
 # Branches Are Just Pointers {#c2-h1}
 
-Chapter 1 left you with a pile of snapshots, each commit naming its parent. That chain of parents is the whole history. So what's a branch? Much less than you might expect, and that's good news, because it means branches are cheap to make and almost impossible to break. {#c2-p01}
+Unit 1 left you with a pile of snapshots, each commit naming its parent. That chain of parents is the whole history. So what's a branch? Much less than you might expect, and that's good news, because it means branches are cheap to make and almost impossible to break. {#c2-p01}
 
 ## A branch is a file with a hash in it {#c2-h2}
 
@@ -36,7 +36,7 @@ You run `git branch experiment` and then commit twice without switching. Which b
 
 If you check out a commit directly, with `git checkout 3f2a9c1` or a tag, HEAD holds that commit's hash instead of a branch name. That's all "detached HEAD" means. You can look around and even commit, but each new commit moves only HEAD. No branch follows along, so once you switch away, nothing names those commits any more. {#c2-p06}
 
-The commits aren't deleted, and chapter 4 shows how to find them again. The easy fix is to name them before you leave: `git switch -c <new-branch>` creates a branch at HEAD and attaches HEAD to it. {#c2-p07}
+The commits aren't deleted, and unit 4 shows how to find them again. The easy fix is to name them before you leave: `git switch -c <new-branch>` creates a branch at HEAD and attaches HEAD to it. {#c2-p07}
 
 :::check {#c2-chk2 objective=O3}
 You're in detached HEAD and have made two commits. Using what a branch actually is, explain why switching back to `main` makes those commits seem to vanish, and what one command would have kept them easy to reach.

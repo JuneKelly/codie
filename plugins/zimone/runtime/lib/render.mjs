@@ -1,6 +1,6 @@
-// Renders zimone chapter Markdown into HTML.
+// Renders zimone unit Markdown into HTML.
 //
-// Chapter format (see reference/book.md for the authoring spec):
+// Unit format (see reference/workbook.md for the authoring spec):
 //   - Top-level blocks are separated by blank lines.
 //   - Every top-level block ends with an attribute list: {#block-id key=value ...}
 //     on its last line (or on the opening line of a ``` fence or ::: directive).
@@ -39,7 +39,7 @@ md.renderer.rules.link_open = (tokens, idx, options, env, self) => {
   }
   return renderToken(tokens, idx, options, env, self);
 };
-// Books are text-only, and a remote image would load from a third party: show images as links.
+// Workbooks are text-only, and a remote image would load from a third party: show images as links.
 md.renderer.rules.image = (tokens, idx) => {
   const t = tokens[idx];
   const alt = t.children?.map((c) => c.content).join('') || 'image';
@@ -113,9 +113,34 @@ function plainText(src) {
   return src.replace(/[*_`>#]/g, '').replace(/\[([^\]]+)\]\([^)]*\)/g, '$1').replace(/\s+/g, ' ').trim();
 }
 
-// Renders a chapter. Returns {html, blocks, errors}.
-// blocks: [{id, type, line, text, objective?, for?}]
-export function renderChapter(src) {
+// Block types the user can respond to, and the fields each response must carry. A thread
+// anchored to a whole block of one of these types (no quote) holds the user's responses to it.
+export const RESPONSE_FIELDS = {
+  check: { confidence: [1, 2, 3] }, // 1 guessing, 2 fairly sure, 3 certain
+};
+
+// Validates a user message's fields for a block type (or null: a thread that takes no fields).
+// Returns the fields to store, or throws Error with a message for the user.
+export function validateFields(blockType, fields) {
+  const schema = blockType ? RESPONSE_FIELDS[blockType] : undefined;
+  if (!schema) {
+    if (fields !== undefined && fields !== null) throw new Error('"fields" is only accepted for a response to a block that takes one');
+    return null;
+  }
+  if (!fields || typeof fields !== 'object' || Array.isArray(fields)) throw new Error(`a response to a ${blockType} needs "fields": ${JSON.stringify(Object.keys(schema))}`);
+  const out = {};
+  for (const [key, allowed] of Object.entries(schema)) {
+    if (!allowed.includes(fields[key])) throw new Error(`fields.${key} must be one of ${allowed.join(', ')}`);
+    out[key] = fields[key];
+  }
+  const extra = Object.keys(fields).filter((k) => !(k in schema));
+  if (extra.length) throw new Error(`unexpected fields for a ${blockType}: ${extra.join(', ')}`);
+  return out;
+}
+
+// Renders a unit. Returns {html, blocks, errors}.
+// blocks: [{id, type, line, text, attrs}], attrs being the block's other attributes (objective=, for=, …)
+export function renderUnit(src) {
   const errors = [];
   const lines = src.replace(/\r\n/g, '\n').split('\n');
   const raw = splitBlocks(lines, 1, errors);
@@ -208,8 +233,7 @@ export function renderChapter(src) {
       type: p.kind === 'directive' ? p.type : p.kind === 'fence' ? 'code' : 'text',
       line: p.line,
       text: plainText(p.body.join('\n')),
-      ...(p.attrs.objective ? { objective: p.attrs.objective } : {}),
-      ...(p.attrs.for ? { for: p.attrs.for } : {}),
+      attrs: Object.fromEntries(Object.entries(p.attrs).filter(([k]) => k !== 'id')),
     }));
 
   errors.sort((a, b) => a.line - b.line);
