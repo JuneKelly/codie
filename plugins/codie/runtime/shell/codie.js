@@ -29,6 +29,8 @@ const state = {
   anchors: new Map(), // thread id -> 'ok' | 'block' | 'chapter' | 'quote-changed' | 'block-missing'
   pendingAnchor: null, // anchor for the ask composer
   selAnchor: null, // anchor for the floating button
+  openThread: null, // id of the one expanded thread in the sidebar, or null
+  drafts: new Map(), // thread id -> unsent follow-up text (survives collapsing)
   wasDown: false,
 };
 
@@ -57,11 +59,25 @@ function el(tag, attrs = {}, ...children) {
 }
 
 let toastTimer;
-function toast(msg) {
-  els.toast.textContent = msg;
+// action: optional {label, run} rendered as a button in the toast.
+function toast(msg, action) {
+  els.toast.replaceChildren(document.createTextNode(msg));
+  if (action) {
+    els.toast.append(
+      el('button', {
+        type: 'button',
+        class: 'cx-toast-action',
+        text: action.label,
+        onclick: () => {
+          els.toast.hidden = true;
+          action.run();
+        },
+      }),
+    );
+  }
   els.toast.hidden = false;
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => (els.toast.hidden = true), 3500);
+  toastTimer = setTimeout(() => (els.toast.hidden = true), action ? 6000 : 3500);
 }
 
 function reportError(err) {
@@ -229,6 +245,31 @@ function messageEl(m) {
   return el('div', { class: 'cx-msg' }, conf ? el('div', { class: 'cx-msg-label', text: `Your answer${conf}` }) : null, el('div', { class: 'cx-msg-reader', text: m.text }));
 }
 
+// Which replies the reader has seen, per browser: {"<thread id>@<created>": codie reply count}.
+// Keyed with the creation time because thread ids restart when a book's server state is reset.
+const SEEN_KEY = 'codie.seenReplies';
+const threadKey = (t) => `${t.id}@${t.created}`;
+const replyCount = (t) => t.messages.filter((m) => m.role === 'codie').length;
+const seen = (() => {
+  try {
+    return JSON.parse(localStorage.getItem(SEEN_KEY) ?? '{}');
+  } catch {
+    return {}; // storage unavailable or unreadable: unread dots last for this page only
+  }
+})();
+const isUnread = (t) => replyCount(t) > (seen[threadKey(t)] ?? 0);
+
+function markSeen(t) {
+  const n = replyCount(t);
+  if ((seen[threadKey(t)] ?? 0) >= n) return;
+  seen[threadKey(t)] = n;
+  try {
+    localStorage.setItem(SEEN_KEY, JSON.stringify(seen));
+  } catch {
+    // storage unavailable: the read state lasts for this page only
+  }
+}
+
 function jumpTo(t) {
   const target = els.content.querySelector(`mark[data-thread-id="${t.id}"]`) || (t.block_id && blockEl(t.block_id));
   if (!target) return;
@@ -247,17 +288,61 @@ function setActive(threadId) {
   }
 }
 
+// Expands one thread (collapsing any other), or collapses all with null.
+function openThread(id) {
+  const prev = state.openThread;
+  state.openThread = id;
+  for (const tid of new Set([prev, id])) {
+    const t = tid && state.threads.get(tid);
+    if (!t) continue;
+    if (tid === id) markSeen(t);
+    replaceCard(t);
+  }
+  setActive(id);
+}
+
+function chipText(t) {
+  if (t.status === 'queued') return 'waiting';
+  if (t.status === 'delivered') return 'thinking…';
+  const n = replyCount(t);
+  return n === 0 ? 'no reply' : n === 1 ? '1 reply' : `${n} replies`;
+}
+
+const ANCHOR_NOTES = {
+  'quote-changed': ['passage revised', 'This passage has been revised since you asked.'],
+  'block-missing': ['passage removed', 'This passage is no longer in the chapter.'],
+};
+
 function threadCard(t) {
-  const anchor = state.anchors.get(t.id);
-  const card = el('div', { class: 'cx-thread', 'data-thread-id': t.id });
-  if (t.quote) card.append(el('blockquote', { class: 'cx-quote', 'data-jump': true, title: 'Show in text', text: t.quote, onclick: () => jumpTo(t) }));
-  else if (!t.block_id) card.append(el('div', { class: 'cx-thread-meta', text: 'About the whole chapter' }));
-  if (anchor === 'quote-changed') card.append(el('div', { class: 'cx-thread-meta cx-detached', text: 'This passage has been revised since you asked.' }));
-  if (anchor === 'block-missing') card.append(el('div', { class: 'cx-thread-meta cx-detached', text: 'This passage is no longer in the chapter.' }));
-  for (const m of t.messages) card.append(messageEl(m));
+  const open = state.openThread === t.id;
+  const note = ANCHOR_NOTES[state.anchors.get(t.id)];
+  const firstQuestion = t.messages.find((m) => m.role === 'reader')?.text ?? '';
+  const head = el(
+    'button',
+    { type: 'button', class: 'cx-thread-head', 'aria-expanded': String(open), onclick: () => openThread(open ? null : t.id) },
+    el('span', { class: t.quote ? 'cx-thread-quote' : 'cx-thread-quote cx-thread-chapter', text: t.quote ?? 'About the whole chapter' }),
+    open ? null : el('span', { class: 'cx-thread-q', text: firstQuestion }),
+    el(
+      'span',
+      { class: 'cx-thread-tags' },
+      el('span', { class: `cx-chip cx-chip-${t.status}`, text: chipText(t) }),
+      !open && isUnread(t) ? el('span', { class: 'cx-new', text: 'new' }) : null,
+      note ? el('span', { class: 'cx-detached', text: note[0] }) : null,
+    ),
+  );
+  const card = el('div', { class: 'cx-thread', 'data-thread-id': t.id, 'data-open': String(open) }, head);
+  if (!open) return card;
+
+  const body = el('div', { class: 'cx-thread-body' });
+  if (t.quote) body.append(el('blockquote', { class: 'cx-quote', 'data-jump': true, title: 'Show in text', text: t.quote, onclick: () => jumpTo(t) }));
+  if (note) body.append(el('div', { class: 'cx-thread-meta cx-detached', text: note[1] }));
+  for (const m of t.messages) body.append(messageEl(m));
   const status = statusLine(t);
-  if (status) card.append(status);
+  if (status) body.append(status);
+
   const text = el('textarea', { rows: 1, placeholder: 'Follow up…', required: true });
+  text.value = state.drafts.get(t.id) ?? '';
+  text.addEventListener('input', () => state.drafts.set(t.id, text.value));
   const form = el('form', { class: 'cx-followup' }, text, el('div', { class: 'cx-row' }, el('button', { type: 'submit', class: 'cx-btn cx-btn-quiet', text: 'Send' })));
   form.addEventListener('submit', async (ev) => {
     ev.preventDefault();
@@ -265,10 +350,12 @@ function threadCard(t) {
     if (!question) return;
     // Clear first: a live update may replace this card before the request returns.
     text.value = '';
+    state.drafts.delete(t.id);
     try {
       upsertThread(await api('/api/ask', { thread_id: t.id, question }));
     } catch (err) {
       reportError(err);
+      state.drafts.set(t.id, question);
       const current = els.threads.querySelector(`[data-thread-id="${t.id}"] .cx-followup textarea`);
       if (current) current.value = question;
     }
@@ -276,7 +363,8 @@ function threadCard(t) {
   text.addEventListener('keydown', (ev) => {
     if (ev.key === 'Enter' && (ev.metaKey || ev.ctrlKey)) form.requestSubmit();
   });
-  card.append(form);
+  body.append(form);
+  card.append(body);
   return card;
 }
 
@@ -297,14 +385,12 @@ function renderThreads() {
 function replaceCard(t) {
   const old = els.threads.querySelector(`[data-thread-id="${t.id}"]`);
   if (!old) return renderThreads();
-  const draft = old.querySelector('.cx-followup textarea');
-  const hadFocus = document.activeElement === draft;
+  const focused = old.contains(document.activeElement) ? document.activeElement : null;
   const card = threadCard(t);
-  const newText = card.querySelector('.cx-followup textarea');
-  newText.value = draft.value;
   if (old.classList.contains('cx-active')) card.classList.add('cx-active');
   old.replaceWith(card);
-  if (hadFocus) newText.focus();
+  if (focused?.matches('textarea')) card.querySelector('.cx-followup textarea')?.focus();
+  else if (focused?.matches('.cx-thread-head')) card.querySelector('.cx-thread-head').focus();
 }
 
 function upsertThread(t) {
@@ -312,9 +398,21 @@ function upsertThread(t) {
   state.threads.set(t.id, t);
   if (t.kind === 'check') return renderCheck(t);
   if (!prev) state.anchors.set(t.id, applyMark(t));
+  const visible = t.id === state.openThread && document.body.classList.contains('cx-side-open');
+  if (visible) markSeen(t);
   replaceCard(t);
   const last = t.messages[t.messages.length - 1];
-  if (prev && prev.status !== 'answered' && t.status === 'answered' && last?.role === 'codie') toast('codie answered');
+  if (prev && prev.status !== 'answered' && t.status === 'answered' && last?.role === 'codie') {
+    if (visible) toast('codie answered');
+    else
+      toast('codie answered', {
+        label: 'Show',
+        run: () => {
+          openSide();
+          openThread(t.id);
+        },
+      });
+  }
 }
 
 // ---------------------------------------------------------------- checks
@@ -500,7 +598,7 @@ els.compose.addEventListener('submit', async (ev) => {
     closeCompose();
     getSelection().removeAllRanges();
     upsertThread(t);
-    setActive(t.id);
+    openThread(t.id);
   } catch (err) {
     reportError(err);
   } finally {
@@ -555,7 +653,7 @@ els.content.addEventListener('click', (ev) => {
   const mark = ev.target.closest('mark.cx-mark');
   if (!mark || !getSelection().isCollapsed) return;
   openSide();
-  setActive(mark.dataset.threadId);
+  openThread(mark.dataset.threadId);
 });
 
 els.finishBtn.addEventListener('click', async () => {

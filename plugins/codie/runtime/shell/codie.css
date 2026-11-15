@@ -132,11 +132,33 @@ body.cx-side-closed .cx-side { display: none; }
 .cx-compose textarea, .cx-followup textarea { width: 100%; padding: 8px; border: 1px solid var(--rule); border-radius: 6px; background: var(--surface); resize: vertical; font-size: 14px; }
 .cx-quote { margin: 0; padding: 2px 0 2px 10px; border-left: 3px solid var(--accent); color: var(--muted); font-family: var(--serif); font-size: 15px; font-style: italic; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
 .cx-quote[data-jump] { cursor: pointer; }
-.cx-threads { display: grid; gap: 12px; }
-.cx-thread { border: 1px solid var(--rule); border-radius: 8px; padding: 12px; display: grid; gap: 10px; background: var(--surface); }
+.cx-threads { display: grid; gap: 8px; }
+.cx-thread { border: 1px solid var(--rule); border-radius: 8px; background: var(--surface); }
 .cx-thread.cx-active { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
 .cx-thread-meta { font-size: 12px; color: var(--muted); }
 .cx-detached { color: var(--warn); }
+
+/* Collapsed row: one line of quote, one line of question, then status tags. */
+.cx-thread-head {
+  display: grid; gap: 3px; width: 100%; padding: 9px 30px 9px 12px; position: relative;
+  background: none; border: 0; border-radius: 8px; text-align: left; cursor: pointer; font-family: var(--sans);
+}
+.cx-thread-head:hover { background: var(--surface-2); }
+.cx-thread-head::after {
+  content: "›"; position: absolute; right: 12px; top: 8px; font-size: 18px; color: var(--muted); transition: transform 0.15s ease;
+}
+.cx-thread-head[aria-expanded="true"]::after { transform: rotate(90deg); }
+.cx-thread-quote, .cx-thread-q { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cx-thread-quote { font-family: var(--serif); font-style: italic; font-size: 14px; color: var(--muted); }
+.cx-thread-chapter { font-family: var(--sans); font-style: normal; font-size: 12px; }
+.cx-thread-q { font-size: 14px; color: var(--text); }
+.cx-thread-head[aria-expanded="true"] .cx-thread-quote { display: none; }
+.cx-thread-head[aria-expanded="true"] .cx-thread-chapter { display: block; }
+.cx-thread-tags { display: flex; align-items: center; gap: 6px; font-size: 12px; }
+.cx-chip { color: var(--muted); }
+.cx-chip-queued, .cx-chip-delivered { color: var(--accent); }
+.cx-new { font-weight: 600; color: var(--bg); background: var(--accent); border-radius: 999px; padding: 0 7px; line-height: 17px; }
+.cx-thread-body { display: grid; gap: 10px; padding: 0 12px 12px; }
 .cx-msg { font-size: 14.5px; }
 .cx-msg-reader { background: var(--surface-2); padding: 8px 10px; border-radius: 6px; white-space: pre-wrap; }
 .cx-msg-codie p { margin: 0 0 0.6em; }
@@ -156,6 +178,10 @@ body.cx-side-closed .cx-side { display: none; }
   position: fixed; z-index: 30; font-family: var(--sans); font-size: 13px; font-weight: 600;
   background: var(--text); color: var(--bg); border: 0; border-radius: 6px; padding: 6px 10px; cursor: pointer;
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.2);
+}
+.cx-toast-action {
+  margin-left: 12px; font: inherit; font-weight: 600; color: inherit; background: none;
+  border: 1px solid currentColor; border-radius: 6px; padding: 1px 8px; cursor: pointer;
 }
 .cx-toast {
   position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 40;
