@@ -20,7 +20,7 @@ Run `$CODIE detect .` and follow the matching section:
 | Result | Mode |
 |---|---|
 | `book` | This folder is already a book. Tell the user, and suggest `/codie:open`. Stop. |
-| `brief` | **Continue from a brief**: this book was commissioned from another session. |
+| `brief` | This book was commissioned from another session. Read the planning reference (`$CODIE docs planning`) and follow it from **Continue from a brief**, with `.` as the book. (`/codie:open` does the same.) |
 | `empty` | **Write here**: this folder becomes the book. |
 | `other` | **Commission**: this session is about something else. Write a brief into a new book folder and hand off. |
 
@@ -57,18 +57,13 @@ Do not write chapters in this session.
    **Still to settle**.
 6. **Hand off.** The book is written and taught in its own session, started in the book folder.
    - If you have a tool that starts a new Claude Code session in a given folder, offer to use
-     it, with the prompt `/codie:new`.
-   - Otherwise give the command: `cd "<book>" && claude "/codie:new"`.
+     it, with the prompt `/codie:open`.
+   - Otherwise give the command: `cd "<book>" && claude "/codie:open"`.
+
+   Tell the user that `/codie:open` in that folder picks up the brief, and that it's also the
+   command for every later visit.
 
    Then go back to what the user was doing before.
-
-## Continue from a brief
-
-1. Read `brief.md` and everything in `context/`.
-2. Confirm the goal in one line, and ask only what's under **Still to settle**, with one
-   AskUserQuestion call. If the brief's evidence about their level is thin, add one or two
-   short diagnostic questions in chat.
-3. Go to **Plan and write**.
 
 ## Write here (empty folder)
 
@@ -82,16 +77,5 @@ open questions in plain chat:
    sources (primary-led / commentary-led / mixed); tone; how much active learning. Ask about
    a specific edition only if they want to read primary texts.
 
-Then go to **Plan and write**.
-
-## Plan and write
-
-1. In the book folder, create `book.json`, `plan.md` and `learner.md` as described in
-   the book reference, and a `.gitignore` containing `.codie/` if there isn't one. Fill
-   `learner.md`'s **Motivation** from the brief or the interview.
-2. Present the aim, objectives and syllabus in chat. Ask for approval with AskUserQuestion
-   (approve / adjust), and revise until approved. Don't write chapters before approval.
-3. Write chapter one, following the book reference, and run `$CODIE check . <id>` until it
-   passes.
-4. Serve the book: read the serving reference (`$CODIE docs serving`) and follow it, with `.` as
-   the book. Keep handling reader events for the rest of the session.
+Then read the planning reference (`$CODIE docs planning`) and follow it from **Plan and write**,
+with `.` as the book.

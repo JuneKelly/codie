@@ -44,14 +44,18 @@ What happens depends on the folder:
 - **Another project**: say you're deep in an app and realise you need to understand query
   planning. codie runs a short interview seeded from the conversation. It asks where your book
   library lives (once) and which bits of the project to copy in as context. Then it writes a
-  `brief.md` into a new book folder and hands off to a session started there, which continues
-  with `/codie:new`. Your working session stays on your work.
+  `brief.md` into a new book folder and hands off to a session started there. Your working
+  session stays on your work.
 
-**Come back to a book later.** Start a session in its folder and run:
+**Open a book**, whether it's one you commissioned or one you're coming back to. Start a
+session in its folder and run:
 
 ```
 /codie:open
 ```
+
+For a commissioned book, the first `/codie:open` settles what the brief left open, proposes
+the syllabus, and writes chapter one. After that, it picks up where you left off.
 
 ## What a book looks like
 
