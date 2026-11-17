@@ -28,6 +28,8 @@ answers and finished units flow back to that session through a Monitor running
 | `docs/TESTING.md` | How to test changes by hand, including a live tutoring test |
 | `docs/transcripts/` | Numbered summaries of past working sessions: decisions, reasons, lessons |
 | `CHANGELOG.md` | What each plugin version gave users |
+| `scripts/verify.mjs` | Runs the automatable checks for what changed and lists the manual ones owed |
+| `.claude/skills/verify/` | Project skill: run `verify.mjs`, then the manual checks it lists |
 | `.claude/skills/version-bump/` | Project skill: when and how to bump the plugin version |
 
 ## Commands
@@ -41,7 +43,8 @@ node plugins/zimone/runtime/bin/zimone.mjs serve examples/demo    # try the page
 node plugins/zimone/runtime/bin/zimone.mjs url examples/demo      # the URL that server is on
 ```
 
-There is no automated test suite. [docs/TESTING.md](docs/TESTING.md) has the manual checks:
+`node scripts/verify.mjs` runs the checks that match your diff and lists the manual ones still owed
+(see the `verify` skill). There is no automated test suite beyond that. [docs/TESTING.md](docs/TESTING.md) has the manual checks:
 the CLI and HTTP API against a scratch copy of `examples/demo`, the page in a browser, and a live
 tutoring test with a real session.
 
